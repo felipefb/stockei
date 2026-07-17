@@ -1,0 +1,41 @@
+# Stockei - CI/CD via GitHub Actions
+# Build, testa e publica imagens no ECR; deploy no ECS.
+name: stockei-ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests backend/tests -q
+
+  build-and-deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: sa-east-1
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build and push api-core
+        run: |
+          docker build -t ${{ steps.ecr.outputs.registry }}/stockei/api-core:${{ github.sha }} -f backend/Dockerfile .
+          docker push ${{ steps.ecr.outputs.registry }}/stockei/api-core:${{ github.sha }}
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service --cluster stockei-cluster \
+            --service api-core --force-new-deployment

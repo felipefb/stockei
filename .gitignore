@@ -52,3 +52,6 @@ logs/
 # Config
 config/local.yaml
 config/secrets.yaml
+
+*.db
+test_stockei.db

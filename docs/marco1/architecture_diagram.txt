@@ -1,0 +1,39 @@
+STOCKEI - ARQUITETURA (AWS sa-east-1)
+======================================
+
+ [Camera/Browser]        [Portal Web Vue.js]
+       |  frames JPEG 3-5fps      |  HTTPS
+       v                          v
+ +---------------------------------------------+
+ |                  ALB (HTTPS/WSS)            |
+ +----------+----------------+-----------------+
+            |                |
+            v                v
+   +----------------+  +----------------+
+   | stream-gateway |  |    api-core    |
+   | FastAPI + WS   |  | FastAPI (CRUD, |
+   | fila de frames |  | auth JWT)      |
+   +-------+--------+  +-------+--------+
+           |                   |
+           v                   v
+   +----------------+  +----------------+
+   |  Redis         |  | RDS PostgreSQL |
+   |  queue + cache |  | Multi-AZ       |
+   +-------+--------+  +----------------+
+           |
+           v
+   +---------------------------+
+   | inference-service (GPU)   |
+   | YOLOv8 custom + DeepSORT  |
+   | + Tesseract OCR           |
+   +------------+--------------+
+                |
+                v
+       +----------------+
+       |  S3 (frames,   |
+       |  datasets,     |
+       |  modelos .pt)  |
+       +----------------+
+
+ CI/CD: GitHub -> CodePipeline -> CodeBuild -> ECR -> ECS
+ Observabilidade: CloudWatch (logs, metrics, alarms, dashboard)

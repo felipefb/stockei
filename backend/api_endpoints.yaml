@@ -1,0 +1,1130 @@
+openapi: 3.1.0
+info:
+  title: Stockei API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /auth/register:
+    post:
+      summary: Register
+      operationId: register_auth_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegister'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /auth/login:
+    post:
+      summary: Login
+      operationId: login_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /auth/refresh:
+    post:
+      summary: Refresh
+      operationId: refresh_auth_refresh_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /auth/logout:
+    post:
+      summary: Logout
+      operationId: logout_auth_logout_post
+      responses:
+        '204':
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+  /users/me:
+    get:
+      summary: Me
+      operationId: me_users_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+      security:
+      - HTTPBearer: []
+    put:
+      summary: Update Me
+      operationId: update_me_users_me_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /users/{user_id}:
+    get:
+      summary: Get User
+      operationId: get_user_users__user_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /customers:
+    get:
+      summary: List Customers
+      operationId: list_customers_customers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CustomerOut'
+                type: array
+                title: Response List Customers Customers Get
+      security:
+      - HTTPBearer: []
+    post:
+      summary: Create Customer
+      operationId: create_customer_customers_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /customers/{customer_id}:
+    get:
+      summary: Get Customer
+      operationId: get_customer_customers__customer_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: customer_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Customer Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      summary: Update Customer
+      operationId: update_customer_customers__customer_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: customer_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Customer Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Customer
+      operationId: delete_customer_customers__customer_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: customer_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Customer Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /stores:
+    get:
+      summary: List Stores
+      operationId: list_stores_stores_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/StoreOut'
+                type: array
+                title: Response List Stores Stores Get
+      security:
+      - HTTPBearer: []
+    post:
+      summary: Create Store
+      operationId: create_store_stores_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /stores/{store_id}:
+    get:
+      summary: Get Store
+      operationId: get_store_stores__store_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Store Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      summary: Update Store
+      operationId: update_store_stores__store_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Store Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /cameras:
+    get:
+      summary: List Cameras
+      operationId: list_cameras_cameras_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CameraOut'
+                type: array
+                title: Response List Cameras Cameras Get
+      security:
+      - HTTPBearer: []
+    post:
+      summary: Create Camera
+      operationId: create_camera_cameras_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CameraIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CameraOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /cameras/{camera_id}:
+    get:
+      summary: Get Camera
+      operationId: get_camera_cameras__camera_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: camera_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Camera Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CameraOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      summary: Update Camera
+      operationId: update_camera_cameras__camera_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: camera_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Camera Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CameraIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CameraOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /products:
+    get:
+      summary: List Products
+      operationId: list_products_products_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProductOut'
+                type: array
+                title: Response List Products Products Get
+      security:
+      - HTTPBearer: []
+    post:
+      summary: Create Product
+      operationId: create_product_products_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /products/{product_id}:
+    get:
+      summary: Get Product
+      operationId: get_product_products__product_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      summary: Update Product
+      operationId: update_product_products__product_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Product Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /inventory:
+    get:
+      summary: List Inventory
+      operationId: list_inventory_inventory_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/InventoryOut'
+                type: array
+                title: Response List Inventory Inventory Get
+      security:
+      - HTTPBearer: []
+  /inventory/count:
+    post:
+      summary: Count Inventory
+      operationId: count_inventory_inventory_count_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CountRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /inventory/count/{inventory_id}:
+    get:
+      summary: Get Count
+      operationId: get_count_inventory_count__inventory_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: inventory_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Inventory Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movements:
+    get:
+      summary: List Movements
+      operationId: list_movements_movements_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MovementOut'
+                type: array
+                title: Response List Movements Movements Get
+      security:
+      - HTTPBearer: []
+    post:
+      summary: Create Movement
+      operationId: create_movement_movements_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MovementIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+components:
+  schemas:
+    CameraIn:
+      properties:
+        store_id:
+          type: integer
+          title: Store Id
+        name:
+          type: string
+          title: Name
+        location:
+          type: string
+          title: Location
+          default: ''
+      type: object
+      required:
+      - store_id
+      - name
+      title: CameraIn
+    CameraOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        store_id:
+          type: integer
+          title: Store Id
+        name:
+          type: string
+          title: Name
+        location:
+          type: string
+          title: Location
+        status:
+          type: string
+          title: Status
+        last_seen:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Seen
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - store_id
+      - name
+      - location
+      - status
+      - last_seen
+      - created_at
+      title: CameraOut
+    CountRequest:
+      properties:
+        product_id:
+          type: integer
+          title: Product Id
+        quantity:
+          type: integer
+          title: Quantity
+      type: object
+      required:
+      - product_id
+      - quantity
+      title: CountRequest
+    CustomerIn:
+      properties:
+        name:
+          type: string
+          title: Name
+        cnpj:
+          type: string
+          title: Cnpj
+        email:
+          type: string
+          format: email
+          title: Email
+        phone:
+          type: string
+          title: Phone
+          default: ''
+        plan:
+          type: string
+          title: Plan
+          default: pilot
+      type: object
+      required:
+      - name
+      - cnpj
+      - email
+      title: CustomerIn
+    CustomerOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        cnpj:
+          type: string
+          title: Cnpj
+        email:
+          type: string
+          title: Email
+        phone:
+          type: string
+          title: Phone
+        plan:
+          type: string
+          title: Plan
+        status:
+          type: string
+          title: Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - cnpj
+      - email
+      - phone
+      - plan
+      - status
+      - created_at
+      title: CustomerOut
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InventoryOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        product_id:
+          type: integer
+          title: Product Id
+        quantity:
+          type: integer
+          title: Quantity
+        last_count:
+          type: integer
+          title: Last Count
+        last_counted_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Counted At
+      type: object
+      required:
+      - id
+      - product_id
+      - quantity
+      - last_count
+      - last_counted_at
+      title: InventoryOut
+    MovementIn:
+      properties:
+        product_id:
+          type: integer
+          title: Product Id
+        quantity:
+          type: integer
+          title: Quantity
+        type:
+          type: string
+          pattern: ^(in|out|adjustment)$
+          title: Type
+      type: object
+      required:
+      - product_id
+      - quantity
+      - type
+      title: MovementIn
+    MovementOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        product_id:
+          type: integer
+          title: Product Id
+        quantity:
+          type: integer
+          title: Quantity
+        type:
+          type: string
+          title: Type
+        user_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: User Id
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+      type: object
+      required:
+      - id
+      - product_id
+      - quantity
+      - type
+      - user_id
+      - timestamp
+      title: MovementOut
+    ProductIn:
+      properties:
+        store_id:
+          type: integer
+          title: Store Id
+        sku:
+          type: string
+          title: Sku
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+          default: ''
+        price:
+          type: number
+          title: Price
+          default: 0.0
+      type: object
+      required:
+      - store_id
+      - sku
+      - name
+      title: ProductIn
+    ProductOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        store_id:
+          type: integer
+          title: Store Id
+        sku:
+          type: string
+          title: Sku
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+        price:
+          type: number
+          title: Price
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - store_id
+      - sku
+      - name
+      - category
+      - price
+      - created_at
+      title: ProductOut
+    RefreshRequest:
+      properties:
+        refresh_token:
+          type: string
+          title: Refresh Token
+      type: object
+      required:
+      - refresh_token
+      title: RefreshRequest
+    StoreIn:
+      properties:
+        customer_id:
+          type: integer
+          title: Customer Id
+        name:
+          type: string
+          title: Name
+        address:
+          type: string
+          title: Address
+          default: ''
+        city:
+          type: string
+          title: City
+          default: ''
+        state:
+          type: string
+          title: State
+          default: ''
+      type: object
+      required:
+      - customer_id
+      - name
+      title: StoreIn
+    StoreOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        customer_id:
+          type: integer
+          title: Customer Id
+        name:
+          type: string
+          title: Name
+        address:
+          type: string
+          title: Address
+        city:
+          type: string
+          title: City
+        state:
+          type: string
+          title: State
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - customer_id
+      - name
+      - address
+      - city
+      - state
+      - created_at
+      title: StoreOut
+    TokenPair:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+        token_type:
+          type: string
+          title: Token Type
+          default: bearer
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      title: TokenPair
+    UserLogin:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: UserLogin
+    UserOut:
+      properties:
+        id:
+          type: integer
+          title: Id
+        email:
+          type: string
+          title: Email
+        name:
+          type: string
+          title: Name
+        role:
+          type: string
+          title: Role
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - email
+      - name
+      - role
+      - created_at
+      title: UserOut
+    UserRegister:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+        password:
+          type: string
+          minLength: 8
+          title: Password
+        name:
+          type: string
+          minLength: 1
+          title: Name
+      type: object
+      required:
+      - email
+      - password
+      - name
+      title: UserRegister
+    UserUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+      type: object
+      title: UserUpdate
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
