@@ -55,3 +55,6 @@ config/secrets.yaml
 
 *.db
 test_stockei.db
+
+.coverage
+qa/coverage_report/
