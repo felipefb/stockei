@@ -37,6 +37,11 @@ app.add_middleware(
 
 _bearer = HTTPBearer(auto_error=False)
 
+# Fluxo de frames (captura -> fila -> YOLOv8 -> WebSocket)
+from backend.frame_processing_api import mount as _mount_frames  # noqa: E402
+
+_mount_frames(app)
+
 # Rate limiting simples em memória (produção: Redis)
 _RATE_LIMIT = 100  # req/min por IP
 _rate_state: dict[str, list[float]] = {}

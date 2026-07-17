@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stockei — Captura de Câmera</title>
+  <link rel="stylesheet" href="camera_styles.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>📦 Stockei</h1>
+      <p class="subtitle">Contagem de estoque por câmera</p>
+    </header>
+
+    <section class="video-panel">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <canvas id="capture-canvas" hidden></canvas>
+      <div id="status-badge" class="badge offline">Câmera desligada</div>
+    </section>
+
+    <section class="controls">
+      <button id="btn-start" class="btn primary">Iniciar câmera</button>
+      <button id="btn-stop" class="btn danger" disabled>Parar câmera</button>
+      <button id="btn-frame" class="btn" disabled>Capturar frame</button>
+      <label class="toggle">
+        <input type="checkbox" id="chk-stream">
+        Enviar frames ao servidor (3 FPS)
+      </label>
+    </section>
+
+    <section id="error-box" class="error" hidden></section>
+
+    <section class="results">
+      <h2>Detecções em tempo real</h2>
+      <div id="loading" class="loading" hidden>Processando…</div>
+      <ul id="detections"></ul>
+    </section>
+  </main>
+
+  <script src="camera_streaming.js"></script>
+</body>
+</html>

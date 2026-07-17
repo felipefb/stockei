@@ -1,0 +1,87 @@
+/* Stockei — estilos da captura de câmera (mobile-first) */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+}
+
+.app { max-width: 720px; margin: 0 auto; padding: 1rem; }
+
+header { text-align: center; margin-bottom: 1rem; }
+header h1 { font-size: 1.5rem; }
+.subtitle { color: #94a3b8; font-size: 0.9rem; }
+
+.video-panel {
+  position: relative;
+  background: #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+}
+#video { width: 100%; height: 100%; object-fit: cover; }
+#overlay { position: absolute; inset: 0; pointer-events: none; }
+
+.badge {
+  position: absolute;
+  top: 8px; left: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge.offline { background: #475569; }
+.badge.online { background: #16a34a; }
+.badge.streaming { background: #2563eb; }
+.badge.error { background: #dc2626; }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  align-items: center;
+}
+
+.btn {
+  padding: 0.6rem 1.1rem;
+  border: none;
+  border-radius: 8px;
+  background: #334155;
+  color: #e2e8f0;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary { background: #2563eb; }
+.btn.danger { background: #dc2626; }
+
+.toggle { display: flex; gap: 0.4rem; align-items: center; font-size: 0.85rem; }
+
+.error {
+  background: #7f1d1d;
+  border: 1px solid #dc2626;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.results h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+.loading { color: #94a3b8; font-size: 0.85rem; }
+#detections { list-style: none; }
+#detections li {
+  background: #1e293b;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+#detections li.empty { color: #64748b; }
+
+@media (min-width: 768px) {
+  header h1 { font-size: 2rem; }
+}
