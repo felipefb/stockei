@@ -526,6 +526,67 @@ async def suggest_from_image(
         return {"suggested_name": None, "texts": [], "error": str(exc)}
 
 
+@app.post("/identify/expiry-from-image")
+async def expiry_from_image(
+    frame: UploadFile = File(...),
+    _: models.User = Depends(get_current_user),
+):
+    """Lê a data de validade da embalagem no frame (OCR local RapidOCR)."""
+    from backend.vision_identify import read_package
+    from ml.date_validation import extract_date
+
+    data = await frame.read()
+    try:
+        texts = read_package(data)["texts"]
+    except Exception as exc:
+        logger.warning("OCR indisponível: %s", exc)
+        return {"valid": False, "error": f"OCR indisponível: {exc}"}
+
+    # tenta extrair uma data válida de qualquer texto lido
+    best = None
+    for t in texts:
+        result = extract_date(t["text"])
+        if result["valid"]:
+            return {**result, "source_text": t["text"]}
+        if result["raw"] and best is None:
+            best = {**result, "source_text": t["text"]}
+    return best or {"valid": False, "date": None, "raw": "",
+                    "error": "Nenhuma data encontrada", "suggestions": []}
+
+
+class SetExpiry(schemas.BaseModel):
+    expiry_date: str  # ISO: YYYY-MM-DD
+
+
+@app.post("/identify/{ean}/expiry")
+def set_expiry(
+    ean: str,
+    body: SetExpiry,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Grava a data de validade do lote atual no inventário do produto."""
+    product = db.query(models.Product).filter(models.Product.sku == ean).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    inv = (
+        db.query(models.Inventory)
+        .filter(models.Inventory.product_id == product.id)
+        .first()
+    )
+    if inv is None:
+        inv = models.Inventory(product_id=product.id, quantity=0)
+        db.add(inv)
+    try:
+        inv.expiry_date = datetime.fromisoformat(body.expiry_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Data inválida (use YYYY-MM-DD)")
+    db.commit()
+    days_left = (inv.expiry_date.date() - datetime.utcnow().date()).days
+    return {"ean": ean, "product_name": product.name,
+            "expiry_date": inv.expiry_date.date().isoformat(), "days_left": days_left}
+
+
 @app.post("/identify/ai-suggest")
 async def ai_suggest(
     frame: UploadFile = File(...),
@@ -673,10 +734,29 @@ def dashboard_summary(
         recent_q = recent_q.filter(models.Product.store_id == store_id)
     recent = recent_q.order_by(models.Movement.timestamp.desc()).limit(10).all()
 
+    # validade: vencidos e vencendo em ate 30 dias
+    today = datetime.utcnow().date()
+    expiring = []
+    for product, inv in rows:
+        if inv is None or inv.expiry_date is None or (inv.quantity or 0) == 0:
+            continue
+        days_left = (inv.expiry_date.date() - today).days
+        if days_left <= 30:
+            expiring.append({
+                "name": product.name, "sku": product.sku,
+                "quantity": inv.quantity,
+                "value": round(inv.quantity * (product.price or 0), 2),
+                "expiry_date": inv.expiry_date.date().isoformat(),
+                "days_left": days_left,
+            })
+    expiring.sort(key=lambda i: i["days_left"])
+
     return {
         "total_products": len(rows),
         "total_units": total_units,
         "stock_value": round(stock_value, 2),
+        "expiring": expiring[:10],
+        "expiring_value": round(sum(i["value"] for i in expiring), 2),
         "low_stock": sorted(low_stock, key=lambda i: i["quantity"])[:10],
         "by_category": sorted(by_category.values(), key=lambda c: -c["units"]),
         "recent_movements": [

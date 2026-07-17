@@ -46,10 +46,21 @@ function clearError() {
 async function startCamera() {
   clearError();
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
-      audio: false,
-    });
+    // Câmera traseira no celular. iOS/Safari ignora "ideal", então tentamos
+    // "exact" primeiro e caímos para o padrão se o aparelho não tiver traseira.
+    const base = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { ...base, facingMode: { exact: "environment" } },
+        audio: false,
+      });
+    } catch (err) {
+      if (err.name !== "OverconstrainedError" && err.name !== "NotFoundError") throw err;
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: base,
+        audio: false,
+      });
+    }
     els.video.srcObject = mediaStream;
     els.start.disabled = true;
     els.stop.disabled = false;

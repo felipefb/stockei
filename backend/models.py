@@ -108,6 +108,7 @@ class Inventory(Base):
     quantity: Mapped[int] = mapped_column(Integer, default=0)
     last_count: Mapped[int] = mapped_column(Integer, default=0)
     last_counted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expiry_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
 
     product: Mapped[Product] = relationship(back_populates="inventory")
 

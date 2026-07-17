@@ -82,8 +82,11 @@
               <div class="stat"><span>EAN</span><b id="p-ean">—</b></div>
               <div class="stat"><span>Produto</span><b id="p-name">—</b></div>
               <div class="stat"><span>Em estoque</span><b id="p-qty">—</b></div>
+              <div class="stat"><span>Validade</span><b id="p-expiry">—</b></div>
               <button class="btn primary" style="width:100%;margin-top:0.5rem"
                       onclick="confirmStock()">✓ Confirmar entrada (+1)</button>
+              <button class="btn" style="width:100%;margin-top:0.4rem" id="btn-expiry"
+                      onclick="readExpiry()">📅 Ler validade da embalagem</button>
               <p id="p-msg" class="hint"></p>
             </div>
             <div id="scan-new" hidden>
@@ -353,6 +356,42 @@
     }
     setInterval(refreshCatalog, 5000);
 
+    // Lê a data de validade do frame atual (OCR local) e grava no inventário
+    async function readExpiry() {
+      const btn = document.getElementById("btn-expiry");
+      const msg = document.getElementById("p-msg");
+      const blob = await captureFrame();
+      if (!blob) { msg.textContent = "Ligue a câmera primeiro."; return; }
+      btn.disabled = true;
+      msg.textContent = "📅 Procurando data de validade…";
+      try {
+        const form = new FormData();
+        form.append("frame", blob, "frame.jpg");
+        const r = await fetch("/identify/expiry-from-image", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${sessionStorage.getItem("token")}` },
+          body: form,
+        });
+        const body = await r.json();
+        if (!body.valid || !body.date) {
+          msg.textContent = body.error || "Data não encontrada — aproxime o rótulo da câmera.";
+          return;
+        }
+        const save = await fetch(`/identify/${currentEan}/expiry`, {
+          method: "POST", headers: authHeaders(),
+          body: JSON.stringify({ expiry_date: body.date }),
+        });
+        const saved = await save.json();
+        document.getElementById("p-expiry").textContent =
+          `${saved.expiry_date} (${saved.days_left}d)`;
+        msg.textContent = `✓ Validade registrada: ${saved.expiry_date}`;
+      } catch (e) {
+        msg.textContent = `Erro: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function confirmStock() {
       const r = await fetch(`/identify/${currentEan}/stock-in`, {
         method: "POST", headers: authHeaders(), body: JSON.stringify({ quantity: 1 }),
@@ -365,6 +404,6 @@
       }
     }
   </script>
-  <script src="../frontend/camera_streaming.js"></script>
+  <script src="../frontend/camera_streaming.js?v=3"></script>
 </body>
 </html>

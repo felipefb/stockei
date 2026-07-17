@@ -131,6 +131,7 @@ class InventoryOut(ORMModel):
     quantity: int
     last_count: int
     last_counted_at: datetime | None
+    expiry_date: datetime | None = None
 
 
 class CountRequest(BaseModel):
