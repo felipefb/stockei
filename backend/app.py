@@ -552,6 +552,63 @@ def stock_in_by_ean(
     return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
 
 
+# ---------- Dashboard ----------
+LOW_STOCK_THRESHOLD = 5
+
+
+@app.get("/dashboard/summary")
+def dashboard_summary(
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Resumo executivo do estoque: valor, categorias, alertas e movimentações."""
+    rows = (
+        db.query(models.Product, models.Inventory)
+        .outerjoin(models.Inventory, models.Inventory.product_id == models.Product.id)
+        .all()
+    )
+
+    total_units = 0
+    stock_value = 0.0
+    low_stock = []
+    by_category: dict[str, dict] = {}
+    for product, inv in rows:
+        qty = inv.quantity if inv else 0
+        total_units += qty
+        stock_value += qty * (product.price or 0)
+        if qty < LOW_STOCK_THRESHOLD:
+            low_stock.append({"name": product.name, "quantity": qty, "sku": product.sku})
+        cat = product.category or "Sem categoria"
+        agg = by_category.setdefault(cat, {"category": cat, "units": 0, "value": 0.0})
+        agg["units"] += qty
+        agg["value"] = round(agg["value"] + qty * (product.price or 0), 2)
+
+    recent = (
+        db.query(models.Movement, models.Product)
+        .join(models.Product, models.Product.id == models.Movement.product_id)
+        .order_by(models.Movement.timestamp.desc())
+        .limit(10)
+        .all()
+    )
+
+    return {
+        "total_products": len(rows),
+        "total_units": total_units,
+        "stock_value": round(stock_value, 2),
+        "low_stock": sorted(low_stock, key=lambda i: i["quantity"])[:10],
+        "by_category": sorted(by_category.values(), key=lambda c: -c["units"]),
+        "recent_movements": [
+            {
+                "product": product.name,
+                "type": movement.type,
+                "quantity": movement.quantity,
+                "timestamp": movement.timestamp.isoformat(),
+            }
+            for movement, product in recent
+        ],
+    }
+
+
 # Movements
 @app.get("/movements", response_model=list[schemas.MovementOut])
 def list_movements(

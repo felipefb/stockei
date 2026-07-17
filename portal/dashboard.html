@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stockei — Dashboard</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#1e293b; --text:#e2e8f0; --muted:#94a3b8;
+            --accent:#2563eb; --green:#22c55e; --red:#f87171; --amber:#fbbf24; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    .layout { max-width:1100px; margin:0 auto; padding:1rem; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; }
+    .btn { padding:0.5rem 1rem; border-radius:8px; background:#334155; color:#fff;
+           border:none; cursor:pointer; font-weight:600; text-decoration:none; font-size:0.9rem; }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-bottom:1rem; }
+    .kpi { background:var(--panel); border-radius:12px; padding:1.25rem; }
+    .kpi .label { color:var(--muted); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; }
+    .kpi .value { font-size:1.9rem; font-weight:800; margin-top:0.25rem; }
+    .kpi .value.green { color:var(--green); } .kpi .value.amber { color:var(--amber); }
+    .grid { display:grid; gap:1rem; grid-template-columns:1fr; }
+    @media (min-width:900px) { .grid { grid-template-columns:1fr 1fr; } }
+    .panel { background:var(--panel); border-radius:12px; padding:1.25rem; }
+    .panel h2 { font-size:1rem; margin-bottom:0.75rem; }
+    table { width:100%; border-collapse:collapse; font-size:0.88rem; }
+    th { text-align:left; color:var(--muted); font-weight:600; padding:0.35rem 0.5rem;
+         border-bottom:1px solid #334155; }
+    td { padding:0.45rem 0.5rem; border-bottom:1px solid #26334a; }
+    td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .tag { padding:2px 8px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .tag.in { background:#14532d; color:#86efac; } .tag.out { background:#7f1d1d; color:#fca5a5; }
+    .tag.adjustment { background:#1e3a8a; color:#93c5fd; }
+    .warn { color:var(--red); font-weight:700; }
+    .muted { color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="topbar">
+      <h1>📊 Stockei — Dashboard</h1>
+      <div>
+        <a class="btn" href="demo_portal.html">← Câmera</a>
+        <button class="btn" onclick="load()">Atualizar</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">Valor em estoque</div><div class="value green" id="k-value">—</div></div>
+      <div class="kpi"><div class="label">Unidades totais</div><div class="value" id="k-units">—</div></div>
+      <div class="kpi"><div class="label">Produtos no catálogo</div><div class="value" id="k-products">—</div></div>
+      <div class="kpi"><div class="label">Itens em alerta (&lt; 5 un)</div><div class="value amber" id="k-low">—</div></div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>⚠️ Reposição necessária</h2>
+        <table><thead><tr><th>Produto</th><th style="text-align:right">Qtd</th></tr></thead>
+          <tbody id="t-low"><tr><td class="muted" colspan="2">—</td></tr></tbody></table>
+      </div>
+      <div class="panel">
+        <h2>📦 Por categoria</h2>
+        <table><thead><tr><th>Categoria</th><th style="text-align:right">Unid.</th><th style="text-align:right">Valor (R$)</th></tr></thead>
+          <tbody id="t-cat"><tr><td class="muted" colspan="3">—</td></tr></tbody></table>
+      </div>
+      <div class="panel" style="grid-column:1/-1">
+        <h2>🕒 Últimas movimentações</h2>
+        <table><thead><tr><th>Produto</th><th>Tipo</th><th style="text-align:right">Qtd</th><th>Quando</th></tr></thead>
+          <tbody id="t-mov"><tr><td class="muted" colspan="4">—</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const brl = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
+    const TYPES = { in:"Entrada", out:"Saída", adjustment:"Ajuste" };
+
+    async function load() {
+      const token = sessionStorage.getItem("token");
+      if (!token) { location.href = "demo_portal.html"; return; }
+      const r = await fetch("/dashboard/summary", { headers: { Authorization: `Bearer ${token}` } });
+      if (r.status === 401) { location.href = "demo_portal.html"; return; }
+      const d = await r.json();
+
+      document.getElementById("k-value").textContent = brl(d.stock_value);
+      document.getElementById("k-units").textContent = d.total_units;
+      document.getElementById("k-products").textContent = d.total_products;
+      document.getElementById("k-low").textContent = d.low_stock.length;
+
+      document.getElementById("t-low").innerHTML = d.low_stock.length
+        ? d.low_stock.map(i => `<tr><td>${i.name}</td><td class="num ${i.quantity===0?'warn':''}">${i.quantity}</td></tr>`).join("")
+        : "<tr><td class='muted' colspan='2'>Nenhum item em alerta 🎉</td></tr>";
+
+      document.getElementById("t-cat").innerHTML = d.by_category
+        .map(c => `<tr><td>${c.category}</td><td class="num">${c.units}</td><td class="num">${c.value.toFixed(2)}</td></tr>`).join("");
+
+      document.getElementById("t-mov").innerHTML = d.recent_movements.length
+        ? d.recent_movements.map(m =>
+            `<tr><td>${m.product}</td><td><span class="tag ${m.type}">${TYPES[m.type]||m.type}</span></td>
+             <td class="num">${m.quantity}</td><td class="muted">${new Date(m.timestamp+"Z").toLocaleString("pt-BR")}</td></tr>`).join("")
+        : "<tr><td class='muted' colspan='4'>Sem movimentações ainda</td></tr>";
+    }
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>
