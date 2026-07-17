@@ -35,9 +35,15 @@
       <div class="kpi"><div class="label">Unidades totais</div><div class="value" id="k-units">—</div></div>
       <div class="kpi"><div class="label">Produtos no catálogo</div><div class="value" id="k-products">—</div></div>
       <div class="kpi"><div class="label">Itens em alerta (&lt; 5 un)</div><div class="value amber" id="k-low">—</div></div>
+      <div class="kpi"><div class="label">R$ em risco (validade ≤ 30d)</div><div class="value" id="k-exp" style="color:var(--danger)">—</div></div>
     </div>
 
     <div class="grid">
+      <div class="panel" style="grid-column:1/-1">
+        <h2>⏳ Validade — vencidos e vencendo em 30 dias</h2>
+        <table><thead><tr><th>Produto</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor (R$)</th><th>Vence em</th><th>Situação</th></tr></thead>
+          <tbody id="t-exp"><tr><td class="muted" colspan="5">—</td></tr></tbody></table>
+      </div>
       <div class="panel">
         <h2>⚠️ Reposição necessária</h2>
         <table><thead><tr><th>Produto</th><th style="text-align:right">Qtd</th></tr></thead>
@@ -102,6 +108,20 @@
       document.getElementById("k-units").textContent = d.total_units;
       document.getElementById("k-products").textContent = d.total_products;
       document.getElementById("k-low").textContent = d.low_stock.length;
+      document.getElementById("k-exp").textContent = brl(d.expiring_value || 0);
+
+      document.getElementById("t-exp").innerHTML = (d.expiring || []).length
+        ? d.expiring.map(i => {
+            const tag = i.days_left < 0
+              ? "<span class='tag out'>VENCIDO</span>"
+              : i.days_left <= 7
+                ? `<span class='tag out'>${i.days_left}d</span>`
+                : `<span class='tag adjustment'>${i.days_left}d</span>`;
+            return `<tr><td>${i.name}</td><td class="num">${i.quantity}</td>
+                    <td class="num">${i.value.toFixed(2)}</td>
+                    <td class="muted mono">${i.expiry_date}</td><td>${tag}</td></tr>`;
+          }).join("")
+        : "<tr><td class='muted' colspan='5'>Nenhum item com validade próxima 🎉</td></tr>";
 
       document.getElementById("t-low").innerHTML = d.low_stock.length
         ? d.low_stock.map(i => `<tr><td>${i.name}</td><td class="num ${i.quantity===0?'warn':''}">${i.quantity}</td></tr>`).join("")
