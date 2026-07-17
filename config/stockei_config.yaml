@@ -1,0 +1,42 @@
+# Stockei product configuration
+product:
+  name: Stockei
+  description: SaaS de gestao de estoque com sistema multi-agente
+  currency: BRL
+
+plans:
+  starter:
+    name: Starter
+    price_brl: 49.90
+    features:
+      - Controle basico de estoque
+      - 1 usuario
+      - Relatorios simples
+  pro:
+    name: Pro
+    price_brl: 149.90
+    features:
+      - Controle avancado de estoque
+      - 5 usuarios
+      - Previsao de demanda com IA
+      - Integracoes com marketplaces
+  business:
+    name: Business
+    price_brl: 399.90
+    features:
+      - Multi-lojas e multi-depositos
+      - Usuarios ilimitados
+      - API dedicada
+      - Suporte prioritario
+
+kpi_targets:
+  arr: 5000000
+  churn_rate: 0.05
+  cac: 500
+  ltv: 10000
+  market_share: 0.15
+
+llm:
+  enabled: false
+  provider: openai
+  model: gpt-4o-mini

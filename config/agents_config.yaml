@@ -1,0 +1,93 @@
+# Stockei agents configuration (20 agents across 6 categories)
+agents:
+  # Strategic
+  - name: CEO Agent
+    class: CEOAgent
+    category: strategic
+    enabled: true
+  - name: CFO Agent
+    class: CFOAgent
+    category: strategic
+    enabled: true
+  - name: CTO Agent
+    class: CTOAgent
+    category: strategic
+    enabled: true
+
+  # Planning
+  - name: Product Manager Agent
+    class: ProductManagerAgent
+    category: planning
+    enabled: true
+  - name: Tech Architect Agent
+    class: TechArchitectAgent
+    category: planning
+    enabled: true
+  - name: Project Manager Agent
+    class: ProjectManagerAgent
+    category: planning
+    enabled: true
+
+  # Execution
+  - name: Backend Engineer Agent
+    class: BackendEngineerAgent
+    category: execution
+    enabled: true
+  - name: Frontend Engineer Agent
+    class: FrontendEngineerAgent
+    category: execution
+    enabled: true
+  - name: ML AI Engineer Agent
+    class: MLAIEngineerAgent
+    category: execution
+    enabled: true
+  - name: DevOps Agent
+    class: DevOpsAgent
+    category: execution
+    enabled: true
+
+  # Validation
+  - name: QA Agent
+    class: QAAgent
+    category: validation
+    enabled: true
+  - name: Security Agent
+    class: SecurityAgent
+    category: validation
+    enabled: true
+  - name: Compliance Agent
+    class: ComplianceAgent
+    category: validation
+    enabled: true
+
+  # Commercialization
+  - name: Sales Agent
+    class: SalesAgent
+    category: commercialization
+    enabled: true
+  - name: Marketing Agent
+    class: MarketingAgent
+    category: commercialization
+    enabled: true
+  - name: Customer Success Agent
+    class: CustomerSuccessAgent
+    category: commercialization
+    enabled: true
+  - name: Design UX Agent
+    class: DesignUXAgent
+    category: commercialization
+    enabled: true
+
+  # Evolutionary
+  - name: Product Evolution Agent
+    class: ProductEvolutionAgent
+    category: evolutionary
+    enabled: true
+  - name: Market Research Agent
+    class: MarketResearchAgent
+    category: evolutionary
+    enabled: true
+  - name: Competitive Analysis Agent
+    class: CompetitiveAnalysisAgent
+    category: evolutionary
+    enabled: true
