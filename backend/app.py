@@ -54,13 +54,17 @@ for _dir in ("portal", "frontend"):
         app.mount(f"/{_dir}", StaticFiles(directory=_path, html=True), name=_dir)
 
 # Rate limiting simples em memória (produção: Redis)
-_RATE_LIMIT = 100  # req/min por IP
+_RATE_LIMIT = 600  # req/min por IP (streaming de camera: 3-5 FPS = 180-300 req/min)
+_RATE_EXEMPT = ("/process-frame", "/ws/")  # fluxo continuo de frames não conta
 _rate_state: dict[str, list[float]] = {}
 
 
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next):
     import time
+
+    if request.url.path.startswith(_RATE_EXEMPT):
+        return await call_next(request)
 
     ip = request.client.host if request.client else "unknown"
     now = time.time()
