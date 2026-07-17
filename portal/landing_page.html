@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stockei — Contagem de estoque com IA</title>
+  <style>
+    :root {
+      --bg: #0f172a; --panel: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+      --accent: #2563eb; --green: #22c55e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+    .container { max-width: 1024px; margin: 0 auto; padding: 0 1rem; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; }
+    .logo { font-size: 1.3rem; font-weight: 800; }
+    .btn { display: inline-block; padding: 0.7rem 1.4rem; border-radius: 8px; text-decoration: none;
+           font-weight: 700; color: #fff; background: var(--accent); border: none; cursor: pointer; }
+    .btn.ghost { background: transparent; border: 1px solid var(--muted); }
+    .hero { text-align: center; padding: 4rem 0 3rem; }
+    .hero h1 { font-size: clamp(1.8rem, 5vw, 3rem); margin-bottom: 1rem; }
+    .hero p { color: var(--muted); max-width: 560px; margin: 0 auto 2rem; }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                gap: 1rem; padding: 3rem 0; }
+    .card { background: var(--panel); border-radius: 12px; padding: 1.5rem; }
+    .card h3 { margin-bottom: 0.5rem; }
+    .card p { color: var(--muted); font-size: 0.95rem; }
+    .pricing { padding: 3rem 0; text-align: center; }
+    .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+             gap: 1rem; margin-top: 2rem; }
+    .plan { background: var(--panel); border-radius: 12px; padding: 2rem 1.5rem; }
+    .plan.featured { outline: 2px solid var(--accent); }
+    .price { font-size: 2rem; font-weight: 800; margin: 0.75rem 0; }
+    .price small { font-size: 0.9rem; color: var(--muted); font-weight: 400; }
+    .plan ul { list-style: none; color: var(--muted); font-size: 0.9rem; margin: 1rem 0; }
+    footer { border-top: 1px solid #334155; padding: 2rem 0; color: var(--muted);
+             font-size: 0.9rem; text-align: center; margin-top: 3rem; }
+    section h2 { text-align: center; font-size: 1.6rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <div class="logo">📦 Stockei</div>
+      <a class="btn" href="demo_portal.html">Testar demo</a>
+    </nav>
+
+    <section class="hero">
+      <h1>Seu estoque contado por câmeras, em tempo real</h1>
+      <p>Aponte qualquer câmera para a prateleira e o Stockei detecta produtos, lê datas de
+         validade e conta o estoque automaticamente — sem coletor, sem planilha, sem parar a loja.</p>
+      <a class="btn" href="demo_portal.html">Ver demonstração ao vivo</a>
+      <a class="btn ghost" href="mailto:contato@stockei.com.br">Falar com vendas</a>
+    </section>
+
+    <section class="features">
+      <div class="card"><h3>🎯 Detecção por IA</h3><p>YOLOv8 treinado nos seus produtos identifica itens na prateleira com mais de 90% de precisão.</p></div>
+      <div class="card"><h3>📅 Leitura de validade</h3><p>OCR lê datas de validade e alerta antes do vencimento — reduza perdas em até 30%.</p></div>
+      <div class="card"><h3>🔢 Contagem sem duplicação</h3><p>Rastreamento de objetos garante que cada item conte uma única vez, mesmo com a câmera em movimento.</p></div>
+      <div class="card"><h3>⚡ Tempo real</h3><p>Resultados em menos de 200ms via WebSocket, direto no seu dashboard.</p></div>
+    </section>
+
+    <section class="pricing">
+      <h2>Planos</h2>
+      <div class="plans">
+        <div class="plan">
+          <h3>Piloto</h3>
+          <div class="price">Grátis <small>/ 60 dias</small></div>
+          <ul><li>1 loja · 2 câmeras</li><li>500 contagens/mês</li><li>Suporte por e-mail</li></ul>
+          <a class="btn ghost" href="mailto:contato@stockei.com.br">Participar do piloto</a>
+        </div>
+        <div class="plan featured">
+          <h3>Profissional</h3>
+          <div class="price">R$ 499 <small>/mês por loja</small></div>
+          <ul><li>Câmeras ilimitadas</li><li>Contagens ilimitadas</li><li>Alertas de validade</li><li>Suporte prioritário</li></ul>
+          <a class="btn" href="mailto:contato@stockei.com.br">Assinar</a>
+        </div>
+        <div class="plan">
+          <h3>Corporativo</h3>
+          <div class="price">Sob consulta</div>
+          <ul><li>Multi-lojas e API</li><li>Integração com ERP</li><li>SLA dedicado</li></ul>
+          <a class="btn ghost" href="mailto:contato@stockei.com.br">Falar com vendas</a>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Stockei · contato@stockei.com.br · São Paulo, Brasil
+    </footer>
+  </div>
+</body>
+</html>

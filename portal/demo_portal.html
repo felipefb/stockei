@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stockei — Portal de Demonstração</title>
+  <link rel="stylesheet" href="../frontend/camera_styles.css">
+  <style>
+    .layout { max-width: 1024px; margin: 0 auto; padding: 1rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 2fr 1fr; } }
+    .panel { background: #1e293b; border-radius: 12px; padding: 1rem; }
+    .stat { display: flex; justify-content: space-between; padding: 0.4rem 0;
+            border-bottom: 1px solid #334155; font-size: 0.9rem; }
+    .stat:last-child { border: none; }
+    .stat b { color: #22c55e; }
+    #login-view { max-width: 360px; margin: 4rem auto; }
+    #login-view input { width: 100%; padding: 0.7rem; margin-bottom: 0.75rem; border-radius: 8px;
+                        border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
+    .hint { font-size: 0.8rem; color: #64748b; margin-top: 0.5rem; }
+    .tour { background: #172554; border: 1px solid #2563eb; border-radius: 8px;
+            padding: 0.75rem; font-size: 0.85rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- LOGIN -->
+    <div id="login-view" class="panel">
+      <h1 style="margin-bottom:1rem">📦 Stockei Demo</h1>
+      <input id="email" type="email" placeholder="E-mail" value="demo@stockei.com.br">
+      <input id="password" type="password" placeholder="Senha" value="demo1234">
+      <button class="btn primary" style="width:100%" onclick="login()">Entrar</button>
+      <p class="hint">Demo local: o login registra/autentica no backend em http://localhost:8000.</p>
+      <p id="login-error" class="hint" style="color:#f87171"></p>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dash-view" hidden>
+      <div class="topbar">
+        <h1>📦 Stockei</h1>
+        <button class="btn" onclick="logout()">Sair</button>
+      </div>
+
+      <div class="tour" id="tour">
+        👋 <b>Tour rápido:</b> 1) Clique em <i>Iniciar câmera</i> e autorize o acesso ·
+        2) Marque <i>Enviar frames</i> para ver detecções em tempo real ·
+        3) Acompanhe as contagens no painel ao lado.
+        <a href="#" onclick="this.parentElement.hidden=true;return false" style="color:#93c5fd">fechar</a>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="video-panel">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlay"></canvas>
+            <canvas id="capture-canvas" hidden></canvas>
+            <div id="status-badge" class="badge offline">Câmera desligada</div>
+          </div>
+          <div class="controls">
+            <button id="btn-start" class="btn primary">Iniciar câmera</button>
+            <button id="btn-stop" class="btn danger" disabled>Parar</button>
+            <button id="btn-frame" class="btn" disabled>Capturar frame</button>
+            <label class="toggle"><input type="checkbox" id="chk-stream"> Enviar frames (3 FPS)</label>
+          </div>
+          <div id="error-box" class="error" hidden></div>
+        </div>
+
+        <div>
+          <div class="panel" style="margin-bottom:1rem">
+            <h2 style="font-size:1rem;margin-bottom:0.5rem">Detecções</h2>
+            <div id="loading" class="loading" hidden>Processando…</div>
+            <ul id="detections"><li class="empty">Aguardando frames…</li></ul>
+          </div>
+          <div class="panel">
+            <h2 style="font-size:1rem;margin-bottom:0.5rem">Sessão de contagem</h2>
+            <div class="stat"><span>Frames enviados</span><b id="s-frames">0</b></div>
+            <div class="stat"><span>Objetos detectados</span><b id="s-objects">0</b></div>
+            <div class="stat"><span>Latência média</span><b id="s-latency">—</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000";
+    let stats = { frames: 0, objects: 0, latencies: [] };
+
+    async function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const err = document.getElementById("login-error");
+      err.textContent = "";
+      try {
+        // tenta registrar (idempotente para a demo) e loga
+        await fetch(`${API}/auth/register`, { method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ email, password, name: "Demo" }) }).catch(() => {});
+        const r = await fetch(`${API}/auth/login`, { method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ email, password }) });
+        if (!r.ok) throw new Error("Credenciais inválidas");
+        sessionStorage.setItem("token", (await r.json()).access_token);
+        document.getElementById("login-view").hidden = true;
+        document.getElementById("dash-view").hidden = false;
+      } catch (e) {
+        err.textContent = `Falha no login: ${e.message}. O backend está rodando?`;
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem("token");
+      location.reload();
+    }
+
+    // Estatísticas da sessão: observa a lista de detecções renderizada pelo streaming
+    const observer = new MutationObserver(() => {
+      stats.frames++;
+      const items = document.querySelectorAll("#detections li:not(.empty)").length;
+      stats.objects += items;
+      document.getElementById("s-frames").textContent = stats.frames;
+      document.getElementById("s-objects").textContent = stats.objects;
+    });
+    window.addEventListener("load", () => {
+      observer.observe(document.getElementById("detections"), { childList: true });
+    });
+  </script>
+  <script src="../frontend/camera_streaming.js"></script>
+</body>
+</html>
