@@ -46,10 +46,15 @@ function clearError() {
 async function startCamera() {
   clearError();
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+    // facingMode "environment" = câmera traseira no celular (notebooks ignoram)
+    const constraints = {
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 },
+      },
       audio: false,
-    });
+    };
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
     els.video.srcObject = mediaStream;
     els.start.disabled = true;
     els.stop.disabled = false;
