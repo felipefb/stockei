@@ -202,6 +202,12 @@
         document.getElementById("scan-found").hidden = true;
         document.getElementById("scan-new").hidden = false;
         document.getElementById("n-ean").textContent = ean;
+        // Autocompleta a descrição quando a base de GTIN conhece o código
+        const input = document.getElementById("n-name");
+        if (body.suggested_name) {
+          input.value = body.suggested_name;
+          input.placeholder = `Sugerido via ${body.suggestion_source} — edite se precisar`;
+        }
       }
     }
 

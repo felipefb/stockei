@@ -436,7 +436,15 @@ def identify(
     """Identifica produto pelo código de barras (sku=EAN) com estoque atual."""
     product = db.query(models.Product).filter(models.Product.sku == ean).first()
     if product is None:
-        return {"found": False, "ean": ean}
+        from backend.product_lookup import lookup_ean
+
+        suggestion = lookup_ean(ean)
+        return {
+            "found": False,
+            "ean": ean,
+            "suggested_name": suggestion["name"] if suggestion else None,
+            "suggestion_source": suggestion["source"] if suggestion else None,
+        }
     inv = (
         db.query(models.Inventory)
         .filter(models.Inventory.product_id == product.id)
