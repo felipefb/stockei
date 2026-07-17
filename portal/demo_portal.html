@@ -90,11 +90,15 @@
               <button class="btn primary" style="width:100%" onclick="registerProduct()">Cadastrar produto</button>
             </div>
           </div>
-          <div class="panel">
+          <div class="panel" style="margin-bottom:1rem">
             <h2 style="font-size:1rem;margin-bottom:0.5rem">Sessão de contagem</h2>
             <div class="stat"><span>Frames enviados</span><b id="s-frames">0</b></div>
             <div class="stat"><span>Objetos detectados</span><b id="s-objects">0</b></div>
             <div class="stat"><span>Latência média</span><b id="s-latency">—</b></div>
+          </div>
+          <div class="panel">
+            <h2 style="font-size:1rem;margin-bottom:0.5rem">🗃 Estoque (catálogo)</h2>
+            <div id="catalog" style="font-size:0.85rem"><span class="loading">—</span></div>
           </div>
         </div>
       </div>
@@ -148,6 +152,7 @@
 
     // ---------- Leitura da embalagem em tempo real (OCR local no backend) ----------
     let nameAutoFilled = false;
+    let nameSource = "manual"; // manual | gtin | ocr
     function startVisionReader() {
       const video = document.getElementById("video");
       setInterval(async () => {
@@ -176,6 +181,7 @@
             input.value = body.suggested_name;
             input.placeholder = "Lido da embalagem — edite se precisar";
             nameAutoFilled = true;
+            nameSource = "ocr";
           }
         } catch (e) { /* servidor ocupado — tenta no próximo ciclo */ }
       }, 2500);
@@ -243,6 +249,7 @@
         if (body.suggested_name) {
           input.value = body.suggested_name;
           input.placeholder = `Sugerido via ${body.suggestion_source} — edite se precisar`;
+          nameSource = "gtin";
         }
       }
     }
@@ -261,10 +268,29 @@
       if (!name) return;
       nameAutoFilled = false;
       const r = await fetch(`/identify/${currentEan}/register`, {
-        method: "POST", headers: authHeaders(), body: JSON.stringify({ name }),
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ name, source: nameSource }),
       });
-      if (r.ok) showProduct(await r.json());
+      if (r.ok) { showProduct(await r.json()); refreshCatalog(); }
     }
+
+    async function refreshCatalog() {
+      try {
+        const [products, inventory] = await Promise.all([
+          (await fetch("/products", { headers: authHeaders() })).json(),
+          (await fetch("/inventory", { headers: authHeaders() })).json(),
+        ]);
+        const qty = Object.fromEntries(inventory.map(i => [i.product_id, i.quantity]));
+        const box = document.getElementById("catalog");
+        if (!products.length) { box.innerHTML = "<span class='loading'>Nenhum produto cadastrado</span>"; return; }
+        box.innerHTML = products.map(p => {
+          const meta = [p.brand, p.category, p.size_value ? `${p.size_value}${p.size_unit}` : null]
+            .filter(Boolean).join(" · ");
+          return `<div class="stat"><span>${p.name}<br><small style="color:#64748b">${meta || p.sku}</small></span><b>${qty[p.id] ?? 0}</b></div>`;
+        }).join("");
+      } catch (e) { /* sem sessão ainda */ }
+    }
+    setInterval(refreshCatalog, 5000);
 
     async function confirmStock() {
       const r = await fetch(`/identify/${currentEan}/stock-in`, {

@@ -116,6 +116,11 @@ class ProductOut(ORMModel):
     name: str
     category: str
     price: float
+    brand: str = ""
+    size_value: float | None = None
+    size_unit: str = ""
+    name_raw: str = ""
+    source: str = "manual"
     created_at: datetime
 
 

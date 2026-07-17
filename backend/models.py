@@ -88,6 +88,12 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(255), index=True)
     category: Mapped[str] = mapped_column(String(100), default="")
     price: Mapped[float] = mapped_column(Float, default=0.0)
+    # Campos normalizados (preenchidos pelo backend/normalizer.py)
+    brand: Mapped[str] = mapped_column(String(100), default="")
+    size_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    size_unit: Mapped[str] = mapped_column(String(10), default="")
+    name_raw: Mapped[str] = mapped_column(String(500), default="")
+    source: Mapped[str] = mapped_column(String(30), default="manual")  # manual|gtin|ocr
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     store: Mapped[Store] = relationship(back_populates="products")

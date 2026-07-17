@@ -464,6 +464,7 @@ def identify(
 
 class RegisterByEan(schemas.BaseModel):
     name: str
+    source: str = "manual"  # manual | gtin | ocr
 
 
 @app.post("/identify/{ean}/register", status_code=201)
@@ -473,11 +474,25 @@ def register_by_ean(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Cadastra produto novo a partir do EAN escaneado."""
+    """Cadastra produto novo a partir do EAN escaneado, com dados normalizados."""
     if db.query(models.Product).filter(models.Product.sku == ean).first():
         raise HTTPException(status_code=409, detail="EAN already registered")
     store = _demo_store(db, user)
-    product = models.Product(store_id=store.id, sku=ean, name=body.name)
+
+    from backend.normalizer import normalize_product
+
+    norm = normalize_product(body.name)
+    product = models.Product(
+        store_id=store.id,
+        sku=ean,
+        name=norm["display_name"],
+        brand=norm["brand"] or "",
+        category=norm["category"] or "",
+        size_value=norm["size_value"],
+        size_unit=norm["size_unit"] or "",
+        name_raw=norm["name_raw"],
+        source=body.source,
+    )
     db.add(product)
     db.flush()
     db.add(models.Inventory(product_id=product.id, quantity=0))
