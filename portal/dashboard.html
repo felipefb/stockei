@@ -4,65 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stockei — Dashboard</title>
+  <link rel="stylesheet" href="../frontend/camera_styles.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
-    :root { --bg:#0b1220; --surface:#121b2e; --surface-2:#16213a; --border:#1e2a44;
-            --text:#e6edf7; --muted:#8ca0bf; --primary:#10b981; --primary-2:#34d399;
-            --accent:#3b82f6; --red:#f87171; --amber:#fbbf24;
-            --grad:linear-gradient(135deg,#10b981 0%,#3b82f6 100%);
-            --radius:14px; --shadow:0 8px 30px rgba(0,0,0,0.35); }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family:'Inter',system-ui,sans-serif; color:var(--text);
-           background:
-             radial-gradient(1200px 600px at 80% -10%, rgba(59,130,246,0.10), transparent 60%),
-             radial-gradient(900px 500px at -10% 30%, rgba(16,185,129,0.08), transparent 55%),
-             var(--bg);
-           -webkit-font-smoothing:antialiased; }
-    .layout { max-width:1100px; margin:0 auto; padding:1.25rem; }
-    .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.4rem; }
-    .topbar h1 { font-weight:900; letter-spacing:-0.02em; font-size:1.4rem;
-                 background:var(--grad); -webkit-background-clip:text; background-clip:text; color:#fff; }
-    .btn { padding:0.55rem 1.1rem; border-radius:10px; background:var(--surface-2); color:var(--text);
-           border:1px solid var(--border); cursor:pointer; font-weight:700; text-decoration:none;
-           font-size:0.88rem; font-family:inherit; transition:transform .12s ease, filter .12s ease; }
-    .btn:hover { transform:translateY(-1px); filter:brightness(1.12); }
-    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1rem; margin-bottom:1rem; }
-    .kpi { background:linear-gradient(180deg,var(--surface) 0%,#0e1729 140%);
-           border:1px solid var(--border); border-radius:var(--radius); padding:1.3rem;
-           box-shadow:var(--shadow); position:relative; overflow:hidden; }
-    .kpi::after { content:''; position:absolute; inset:0 0 auto 0; height:3px; background:var(--grad); opacity:0.7; }
-    .kpi .label { color:var(--muted); font-size:0.74rem; text-transform:uppercase; letter-spacing:0.08em; font-weight:600; }
-    .kpi .value { font-size:2rem; font-weight:900; margin-top:0.3rem; letter-spacing:-0.02em;
-                  font-variant-numeric:tabular-nums; }
-    .kpi .value.green { color:var(--primary-2); } .kpi .value.amber { color:var(--amber); }
-    .grid { display:grid; gap:1rem; grid-template-columns:1fr; }
-    @media (min-width:900px) { .grid { grid-template-columns:1fr 1fr; } }
-    .panel { background:linear-gradient(180deg,var(--surface) 0%,#0e1729 140%);
-             border:1px solid var(--border); border-radius:var(--radius); padding:1.3rem;
-             box-shadow:var(--shadow); }
-    .panel h2 { font-size:0.98rem; margin-bottom:0.8rem; letter-spacing:-0.01em; }
-    table { width:100%; border-collapse:collapse; font-size:0.87rem; }
-    th { text-align:left; color:var(--muted); font-weight:600; font-size:0.76rem;
-         text-transform:uppercase; letter-spacing:0.05em; padding:0.4rem 0.5rem;
-         border-bottom:1px solid var(--border); }
-    td { padding:0.5rem; border-bottom:1px solid #182338; }
-    tr:hover td { background:rgba(59,130,246,0.05); }
-    td.num { text-align:right; font-variant-numeric:tabular-nums; }
-    .tag { padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:800; letter-spacing:0.02em; }
-    .tag.in { background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3); }
-    .tag.out { background:rgba(239,68,68,0.12); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); }
-    .tag.adjustment { background:rgba(59,130,246,0.12); color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
-    .warn { color:var(--red); font-weight:800; }
-    .muted { color:var(--muted); }
+    /* estilos específicos do dashboard — tokens e componentes vêm do design system */
+    .layout { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .topbar .actions { display: flex; gap: 0.5rem; }
+    .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
   <div class="layout">
     <div class="topbar">
-      <h1>📊 Stockei — Dashboard</h1>
       <div>
+        <span class="klabel">Painel de controle</span><br>
+        <span class="brand">STOCKEI</span>
+      </div>
+      <div class="actions">
         <a class="btn" href="demo_portal.html">← Câmera</a>
-        <button class="btn" onclick="load()">Atualizar</button>
+        <button class="btn primary" onclick="load()">Atualizar</button>
       </div>
     </div>
 

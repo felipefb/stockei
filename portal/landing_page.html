@@ -4,102 +4,116 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stockei — Contagem de estoque com IA</title>
+  <link rel="stylesheet" href="../frontend/camera_styles.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
-    :root {
-      --bg: #0b1220; --surface: #121b2e; --surface-2: #16213a; --border: #1e2a44;
-      --text: #e6edf7; --muted: #8ca0bf;
-      --primary: #10b981; --accent: #3b82f6;
-      --grad: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
-      --radius: 16px; --shadow: 0 10px 40px rgba(0,0,0,0.35);
+    /* estilos específicos da landing — tokens vêm do design system */
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 1.4rem; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1.4rem 0; }
+    nav .actions { display: flex; gap: 0.6rem; }
+
+    .hero { padding: 5rem 0 3.5rem; max-width: 780px; }
+    .hero h1 { font-size: clamp(2.2rem, 6vw, 4rem); font-weight: 700; line-height: 1.06; margin: 1rem 0 1.3rem; }
+    .hero h1 em {
+      font-style: normal; color: var(--lime); position: relative; white-space: nowrap;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', system-ui, sans-serif; color: var(--text); line-height: 1.65;
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(59,130,246,0.12), transparent 60%),
-        radial-gradient(900px 500px at -10% 40%, rgba(16,185,129,0.10), transparent 55%),
-        var(--bg);
-      -webkit-font-smoothing: antialiased;
+    .hero h1 em::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: 0.08em; height: 3px;
+      background: var(--lime); box-shadow: 0 0 16px rgba(198,255,62,0.6);
     }
-    .container { max-width: 1060px; margin: 0 auto; padding: 0 1.25rem; }
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 0; }
-    .logo { font-size: 1.35rem; font-weight: 900; letter-spacing: -0.02em;
-            background: var(--grad); -webkit-background-clip: text; background-clip: text; color: #fff; }
-    .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 12px; text-decoration: none;
-           font-weight: 700; font-size: 0.95rem; color: #071018; background: var(--grad); border: none;
-           cursor: pointer; box-shadow: 0 4px 20px rgba(16,185,129,0.35);
-           transition: transform 0.15s ease, filter 0.15s ease; }
-    .btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
-    .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); box-shadow: none; }
-    .hero { text-align: center; padding: 4.5rem 0 3rem; }
-    .hero .eyebrow { display: inline-block; padding: 0.35rem 0.9rem; border-radius: 999px;
-                     border: 1px solid var(--border); background: var(--surface); color: var(--muted);
-                     font-size: 0.78rem; font-weight: 600; margin-bottom: 1.25rem; }
-    .hero h1 { font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 900; letter-spacing: -0.03em;
-               line-height: 1.15; margin-bottom: 1.1rem; }
-    .hero h1 em { font-style: normal; background: var(--grad);
-                  -webkit-background-clip: text; background-clip: text; color: #fff; }
-    .hero p { color: var(--muted); max-width: 580px; margin: 0 auto 2.2rem; font-size: 1.05rem; }
-    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-                gap: 1rem; padding: 3rem 0; }
-    .card { background: linear-gradient(180deg, var(--surface) 0%, #0e1729 140%);
-            border: 1px solid var(--border); border-radius: var(--radius); padding: 1.6rem;
-            box-shadow: var(--shadow); transition: transform 0.18s ease, border-color 0.18s ease; }
-    .card:hover { transform: translateY(-4px); border-color: #2b3d63; }
-    .card .icon { font-size: 1.6rem; display: inline-grid; place-items: center; width: 48px; height: 48px;
-                  border-radius: 12px; background: rgba(16,185,129,0.12);
-                  border: 1px solid rgba(16,185,129,0.25); margin-bottom: 0.9rem; }
-    .card h3 { margin-bottom: 0.4rem; font-size: 1.02rem; letter-spacing: -0.01em; }
-    .card p { color: var(--muted); font-size: 0.92rem; }
-    .pricing { padding: 3rem 0; text-align: center; }
-    section h2 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; }
-    .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-             gap: 1.1rem; margin-top: 2.2rem; }
-    .plan { background: linear-gradient(180deg, var(--surface) 0%, #0e1729 140%);
-            border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem 1.5rem;
-            box-shadow: var(--shadow); position: relative; }
-    .plan.featured { border: 1px solid transparent;
-                     background: linear-gradient(var(--surface), var(--surface)) padding-box,
-                                 var(--grad) border-box; }
-    .plan.featured::before { content: 'MAIS POPULAR'; position: absolute; top: -11px; left: 50%;
-                             transform: translateX(-50%); background: var(--grad); color: #071018;
-                             font-size: 0.65rem; font-weight: 800; padding: 3px 12px;
-                             border-radius: 999px; letter-spacing: 0.06em; }
-    .price { font-size: 2.1rem; font-weight: 900; margin: 0.75rem 0; letter-spacing: -0.02em; }
-    .price small { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
-    .plan ul { list-style: none; color: var(--muted); font-size: 0.9rem; margin: 1rem 0 1.4rem; }
-    .plan li { padding: 0.28rem 0; }
-    .plan li::before { content: '✓  '; color: var(--primary); font-weight: 800; }
-    footer { border-top: 1px solid var(--border); padding: 2rem 0; color: var(--muted);
-             font-size: 0.88rem; text-align: center; margin-top: 3rem; }
+    .hero p { color: var(--muted); max-width: 560px; font-size: 1.06rem; margin-bottom: 2.2rem; }
+    .hero .cta { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+
+    /* faixa de código de barras decorativa */
+    .barcode {
+      height: 42px; margin: 3.5rem 0 0;
+      background: repeating-linear-gradient(90deg,
+        var(--border) 0 2px, transparent 2px 6px,
+        var(--border) 6px 10px, transparent 10px 13px,
+        var(--border) 13px 14px, transparent 14px 22px);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
+      mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
+    }
+
+    section { padding: 3.2rem 0; }
+    .section-head { margin-bottom: 1.8rem; }
+    .section-head h2 { font-size: 1.8rem; margin-top: 0.5rem; }
+
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.6rem; transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+    .card:hover { border-color: var(--lime); transform: translateY(-3px); }
+    .card .n { font-family: var(--font-mono); color: var(--faint); font-size: 0.7rem; letter-spacing: 0.15em; }
+    .card h3 { margin: 0.6rem 0 0.4rem; font-size: 1.05rem; }
+    .card p { color: var(--muted); font-size: 0.9rem; }
+
+    .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.1rem; }
+    .plan {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 2rem 1.6rem; position: relative;
+    }
+    .plan.featured { border-color: var(--lime); box-shadow: 0 0 40px rgba(198,255,62,0.08); }
+    .plan.featured::before {
+      content: 'RECOMENDADO'; position: absolute; top: -10px; left: 1.6rem;
+      background: var(--lime); color: #10130a; font-family: var(--font-mono);
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em; padding: 3px 10px; border-radius: 4px;
+    }
+    .plan h3 { font-size: 1rem; }
+    .price { font-family: var(--font-display); font-size: 2.2rem; font-weight: 700; margin: 0.7rem 0; letter-spacing: -0.03em; }
+    .price small { font-size: 0.82rem; color: var(--muted); font-weight: 400; font-family: var(--font-body); }
+    .plan ul { list-style: none; color: var(--muted); font-size: 0.88rem; margin: 0.8rem 0 1.5rem; }
+    .plan li { padding: 0.3rem 0; }
+    .plan li::before { content: '+ '; color: var(--lime); font-family: var(--font-mono); font-weight: 700; }
+
+    footer {
+      border-top: 1px solid var(--border); padding: 2.2rem 0; color: var(--faint);
+      font-size: 0.85rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <nav>
-      <div class="logo">📦 Stockei</div>
-      <a class="btn" href="demo_portal.html">Testar demo</a>
+      <span class="brand">STOCKEI</span>
+      <div class="actions">
+        <a class="btn ghost" href="mailto:contato@stockei.com.br">Falar com vendas</a>
+        <a class="btn primary" href="demo_portal.html">Testar demo →</a>
+      </div>
     </nav>
 
     <section class="hero">
-      <span class="eyebrow">🇧🇷 IA de inventário para farmácias e mercados</span>
-      <h1>Seu estoque contado por câmeras, <em>em tempo real</em></h1>
-      <p>Aponte qualquer câmera para a prateleira e o Stockei detecta produtos, lê datas de
-         validade e conta o estoque automaticamente — sem coletor, sem planilha, sem parar a loja.</p>
-      <a class="btn" href="demo_portal.html">Ver demonstração ao vivo</a>
-      <a class="btn ghost" href="mailto:contato@stockei.com.br">Falar com vendas</a>
+      <span class="klabel">Visão computacional para varejo</span>
+      <h1>A câmera conta.<br>Você <em>vende</em>.</h1>
+      <p>Aponte qualquer câmera para a prateleira: o Stockei detecta produtos, lê códigos de barras
+         e embalagens, e mantém seu inventário valorizado em tempo real — sem coletor, sem planilha,
+         sem parar a loja.</p>
+      <div class="cta">
+        <a class="btn primary" href="demo_portal.html">Ver demonstração ao vivo</a>
+        <a class="btn ghost" href="#planos">Planos</a>
+      </div>
     </section>
 
-    <section class="features">
-      <div class="card"><span class="icon">🎯</span><h3>Detecção por IA</h3><p>YOLOv8 treinado nos seus produtos identifica itens na prateleira com mais de 90% de precisão.</p></div>
-      <div class="card"><span class="icon">🏷️</span><h3>Leitura de embalagem</h3><p>Código de barras + OCR leem o produto e a validade direto da câmera — cadastro automático.</p></div>
-      <div class="card"><span class="icon">🔢</span><h3>Contagem sem duplicação</h3><p>Rastreamento de objetos garante que cada item conte uma única vez, mesmo com a câmera em movimento.</p></div>
-      <div class="card"><span class="icon">⚡</span><h3>Dashboard em tempo real</h3><p>Valor do estoque, alertas de reposição e movimentações atualizando na hora.</p></div>
+    <div class="barcode" aria-hidden="true"></div>
+
+    <section>
+      <div class="section-head">
+        <span class="klabel">01 — O que ele faz</span>
+        <h2>Quatro motores, uma câmera</h2>
+      </div>
+      <div class="features">
+        <div class="card"><span class="n">[01]</span><h3>Detecção por IA</h3><p>YOLOv8 treinado nos seus produtos identifica itens na prateleira com mais de 90% de precisão.</p></div>
+        <div class="card"><span class="n">[02]</span><h3>Leitura de embalagem</h3><p>Código de barras + OCR leem o produto e a validade direto da câmera — cadastro automático e normalizado.</p></div>
+        <div class="card"><span class="n">[03]</span><h3>Contagem única</h3><p>Rastreamento de objetos garante que cada item conte uma só vez, mesmo com a câmera em movimento.</p></div>
+        <div class="card"><span class="n">[04]</span><h3>Dashboard ao vivo</h3><p>Valor do estoque, alertas de reposição e movimentações atualizando em tempo real.</p></div>
+      </div>
     </section>
 
-    <section class="pricing">
-      <h2>Planos</h2>
+    <section id="planos">
+      <div class="section-head">
+        <span class="klabel">02 — Planos</span>
+        <h2>Comece grátis, cresça quando fizer sentido</h2>
+      </div>
       <div class="plans">
         <div class="plan">
           <h3>Piloto</h3>
@@ -111,7 +125,7 @@
           <h3>Profissional</h3>
           <div class="price">R$ 499 <small>/mês por loja</small></div>
           <ul><li>Câmeras ilimitadas</li><li>Contagens ilimitadas</li><li>Alertas de validade</li><li>Suporte prioritário</li></ul>
-          <a class="btn" href="mailto:contato@stockei.com.br">Assinar</a>
+          <a class="btn primary" href="mailto:contato@stockei.com.br">Assinar</a>
         </div>
         <div class="plan">
           <h3>Corporativo</h3>
@@ -123,7 +137,8 @@
     </section>
 
     <footer>
-      Stockei · contato@stockei.com.br · São Paulo, Brasil
+      <span class="brand" style="font-size:1rem">STOCKEI</span>
+      <span class="mono">contato@stockei.com.br · São Paulo, BR</span>
     </footer>
   </div>
 </body>

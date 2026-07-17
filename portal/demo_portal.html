@@ -7,23 +7,22 @@
   <link rel="stylesheet" href="../frontend/camera_styles.css">
   <style>
     .layout { max-width: 1024px; margin: 0 auto; padding: 1.25rem; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.1rem; }
-    .topbar h1 { font-weight: 900; letter-spacing: -0.02em;
-                 background: var(--grad); -webkit-background-clip: text; background-clip: text; color: #fff; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; }
     .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
     @media (min-width: 900px) { .grid { grid-template-columns: 2fr 1fr; } }
     #login-view { max-width: 380px; margin: 4.5rem auto; }
     #login-view input { margin-bottom: 0.8rem; }
-    .tour { background: rgba(59, 130, 246, 0.10); border: 1px solid rgba(59, 130, 246, 0.35);
+    .tour { background: var(--violet-dim); border: 1px solid rgba(139, 92, 246, 0.45);
             border-radius: 12px; padding: 0.85rem 1rem; font-size: 0.85rem; margin-bottom: 1.1rem; }
-    .tour a { color: #93c5fd; }
+    .tour a { color: #c4b5fd; }
   </style>
 </head>
 <body>
   <div class="layout">
     <!-- LOGIN -->
     <div id="login-view" class="panel">
-      <h1 style="margin-bottom:1rem">📦 Stockei Demo</h1>
+      <span class="klabel">Acesso à demo</span>
+      <h1 class="brand" style="display:block;margin:0.4rem 0 1.2rem;font-size:1.6rem">STOCKEI</h1>
       <input id="email" type="email" placeholder="E-mail" value="demo@stockei.com.br">
       <input id="password" type="password" placeholder="Senha" value="demo1234">
       <button class="btn primary" style="width:100%" onclick="login()">Entrar</button>
@@ -34,9 +33,12 @@
     <!-- DASHBOARD -->
     <div id="dash-view" hidden>
       <div class="topbar">
-        <h1>📦 Stockei</h1>
         <div>
-          <a class="btn" href="dashboard.html" style="text-decoration:none">📊 Dashboard</a>
+          <span class="klabel">Estação de contagem</span><br>
+          <span class="brand">STOCKEI</span>
+        </div>
+        <div>
+          <a class="btn primary" href="dashboard.html" style="text-decoration:none">Dashboard</a>
           <button class="btn" onclick="logout()">Sair</button>
         </div>
       </div>
