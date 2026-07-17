@@ -1,0 +1,57 @@
+# Stockei - Política de Conectores por Agente
+# Fonte: stockei_prompt_integracao_conectores.md (adotada em 17/07/2026)
+# Regras de uso: documentar (Notion), comunicar (Slack/Email), versionar (GitHub),
+# testar (Postman), melhorar continuamente.
+#
+# Nota operacional: ações de envio externo (e-mail, convite de agenda, publicação)
+# exigem confirmação humana por ação, mesmo com a autorização geral desta política.
+
+connectors:
+  disponiveis:   # conectados nesta sessão do Claude Code
+    - github          # via gh CLI (push/commits ativos desde o Marco 1)
+    - notion
+    - postman
+    - figma
+    - canva
+    - gmail           # envio requer confirmação por ação
+    - google_calendar # convites requerem confirmação por ação
+    - google_drive    # leitura
+    - microsoft_365
+    - superhuman_docs
+    - tactiq
+    - higgsfield
+    - claude_in_chrome
+  requerem_autorizacao_oauth:  # usuário precisa autorizar no claude.ai/conectores
+    - bigquery
+    - atlassian
+    - amplitude
+    - hex
+    - definite
+  nao_conectados:
+    - slack
+    - databricks
+    - snowflake
+
+agentes:
+  frontend_engineer: [figma, canva, github, postman, google_drive]
+  design_ux:         [figma, canva, notion, google_drive, slack]
+  backend_engineer:  [github, postman, bigquery, notion, slack]
+  ml_ai_engineer:    [github, databricks, bigquery, notion, slack]
+  product_manager:   [notion, google_drive, slack, gmail, google_calendar]
+  sales:             [gmail, google_drive, canva, slack, google_calendar]
+  marketing:         [canva, gmail, notion, google_drive, slack]
+  qa:                [postman, github, notion, slack, google_drive]
+  devops:            [github, slack, notion, google_calendar, gmail]
+  cto:               [notion, slack, google_drive, gmail, google_calendar]
+  ceo:               [notion, slack, gmail, google_calendar, google_drive]
+
+regras:
+  - sempre_documentar: "Toda entrega relevante registrada no Notion (hub Stockei)"
+  - sempre_versionar: "Commit no GitHub a cada milestone (sem mencao a Claude)"
+  - sempre_testar: "APIs validadas via pytest + collection Postman"
+  - sempre_comunicar: "Envios externos somente com confirmacao do usuario"
+
+metas:
+  cobertura_testes: ">90%"
+  api_latency: "<100ms"
+  lighthouse: ">90"

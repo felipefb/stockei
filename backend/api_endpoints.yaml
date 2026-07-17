@@ -3,6 +3,40 @@ info:
   title: Stockei API
   version: 0.1.0
 paths:
+  /process-frame:
+    post:
+      summary: Process Frame
+      description: Recebe frame JPEG, processa via fila + YOLOv8, retorna e transmite
+        detecções.
+      operationId: process_frame_process_frame_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_process_frame_process_frame_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /process-frame/stats:
+    get:
+      summary: Frame Stats
+      operationId: frame_stats_process_frame_stats_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /health:
     get:
       summary: Health
@@ -630,6 +664,135 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /identify/{ean}:
+    get:
+      summary: Identify
+      description: Identifica produto pelo código de barras (sku=EAN) com estoque
+        atual.
+      operationId: identify_identify__ean__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ean
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Ean
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /identify/{ean}/register:
+    post:
+      summary: Register By Ean
+      description: Cadastra produto novo a partir do EAN escaneado, com dados normalizados.
+      operationId: register_by_ean_identify__ean__register_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ean
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Ean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterByEan'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /identify/suggest-from-image:
+    post:
+      summary: Suggest From Image
+      description: Lê a embalagem no frame (OCR local) e sugere a descrição do produto.
+      operationId: suggest_from_image_identify_suggest_from_image_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_suggest_from_image_identify_suggest_from_image_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /identify/{ean}/stock-in:
+    post:
+      summary: Stock In By Ean
+      description: Confirma entrada em estoque do produto escaneado.
+      operationId: stock_in_by_ean_identify__ean__stock_in_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ean
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Ean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dashboard/summary:
+    get:
+      summary: Dashboard Summary
+      description: 'Resumo executivo do estoque: valor, categorias, alertas e movimentações.'
+      operationId: dashboard_summary_dashboard_summary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
   /movements:
     get:
       summary: List Movements
@@ -672,6 +835,26 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
+    Body_process_frame_process_frame_post:
+      properties:
+        frame:
+          type: string
+          format: binary
+          title: Frame
+      type: object
+      required:
+      - frame
+      title: Body_process_frame_process_frame_post
+    Body_suggest_from_image_identify_suggest_from_image_post:
+      properties:
+        frame:
+          type: string
+          format: binary
+          title: Frame
+      type: object
+      required:
+      - frame
+      title: Body_suggest_from_image_identify_suggest_from_image_post
     CameraIn:
       properties:
         store_id:
@@ -935,6 +1118,27 @@ components:
         price:
           type: number
           title: Price
+        brand:
+          type: string
+          title: Brand
+          default: ''
+        size_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Size Value
+        size_unit:
+          type: string
+          title: Size Unit
+          default: ''
+        name_raw:
+          type: string
+          title: Name Raw
+          default: ''
+        source:
+          type: string
+          title: Source
+          default: manual
         created_at:
           type: string
           format: date-time
@@ -958,6 +1162,27 @@ components:
       required:
       - refresh_token
       title: RefreshRequest
+    RegisterByEan:
+      properties:
+        name:
+          type: string
+          title: Name
+        source:
+          type: string
+          title: Source
+          default: manual
+      type: object
+      required:
+      - name
+      title: RegisterByEan
+    StockIn:
+      properties:
+        quantity:
+          type: integer
+          title: Quantity
+          default: 1
+      type: object
+      title: StockIn
     StoreIn:
       properties:
         customer_id:
