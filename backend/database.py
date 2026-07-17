@@ -5,6 +5,13 @@ PostgreSQL em produção (DATABASE_URL); SQLite em dev/testes.
 
 import os
 
+try:  # carrega variáveis do arquivo .env na raiz do projeto (se existir)
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
