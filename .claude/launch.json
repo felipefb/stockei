@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stockei-api",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "backend.serve"],
+      "port": 8000,
+      "autoPort": true
+    }
+  ]
+}

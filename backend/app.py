@@ -42,6 +42,17 @@ from backend.frame_processing_api import mount as _mount_frames  # noqa: E402
 
 _mount_frames(app)
 
+# Portal e frontend estáticos (demo local)
+import pathlib  # noqa: E402
+
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
+for _dir in ("portal", "frontend"):
+    _path = _ROOT / _dir
+    if _path.is_dir():
+        app.mount(f"/{_dir}", StaticFiles(directory=_path, html=True), name=_dir)
+
 # Rate limiting simples em memória (produção: Redis)
 _RATE_LIMIT = 100  # req/min por IP
 _rate_state: dict[str, list[float]] = {}

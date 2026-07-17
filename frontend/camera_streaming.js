@@ -3,8 +3,9 @@
  * getUserMedia 640x480@30fps → frames JPEG 640x640 (80%) → backend a 3 FPS.
  */
 
+// Vazio = mesma origem (portal servido pelo backend); sobrescreva com window.STOCKEI_API.
 const API_BASE =
-  (typeof window !== "undefined" && window.STOCKEI_API) || "http://localhost:8000";
+  (typeof window !== "undefined" && window.STOCKEI_API) || "";
 const TARGET_SIZE = 640;
 const JPEG_QUALITY = 0.8;
 const STREAM_FPS = 3;
