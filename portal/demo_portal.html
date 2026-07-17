@@ -6,21 +6,17 @@
   <title>Stockei — Portal de Demonstração</title>
   <link rel="stylesheet" href="../frontend/camera_styles.css">
   <style>
-    .layout { max-width: 1024px; margin: 0 auto; padding: 1rem; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .layout { max-width: 1024px; margin: 0 auto; padding: 1.25rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.1rem; }
+    .topbar h1 { font-weight: 900; letter-spacing: -0.02em;
+                 background: var(--grad); -webkit-background-clip: text; background-clip: text; color: #fff; }
     .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
     @media (min-width: 900px) { .grid { grid-template-columns: 2fr 1fr; } }
-    .panel { background: #1e293b; border-radius: 12px; padding: 1rem; }
-    .stat { display: flex; justify-content: space-between; padding: 0.4rem 0;
-            border-bottom: 1px solid #334155; font-size: 0.9rem; }
-    .stat:last-child { border: none; }
-    .stat b { color: #22c55e; }
-    #login-view { max-width: 360px; margin: 4rem auto; }
-    #login-view input { width: 100%; padding: 0.7rem; margin-bottom: 0.75rem; border-radius: 8px;
-                        border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
-    .hint { font-size: 0.8rem; color: #64748b; margin-top: 0.5rem; }
-    .tour { background: #172554; border: 1px solid #2563eb; border-radius: 8px;
-            padding: 0.75rem; font-size: 0.85rem; margin-bottom: 1rem; }
+    #login-view { max-width: 380px; margin: 4.5rem auto; }
+    #login-view input { margin-bottom: 0.8rem; }
+    .tour { background: rgba(59, 130, 246, 0.10); border: 1px solid rgba(59, 130, 246, 0.35);
+            border-radius: 12px; padding: 0.85rem 1rem; font-size: 0.85rem; margin-bottom: 1.1rem; }
+    .tour a { color: #93c5fd; }
   </style>
 </head>
 <body>
