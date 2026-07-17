@@ -488,6 +488,25 @@ def register_by_ean(
             "quantity": 0}
 
 
+from fastapi import File, UploadFile  # noqa: E402
+
+
+@app.post("/identify/suggest-from-image")
+async def suggest_from_image(
+    frame: UploadFile = File(...),
+    _: models.User = Depends(get_current_user),
+):
+    """Lê a embalagem no frame (OCR local) e sugere a descrição do produto."""
+    data = await frame.read()
+    try:
+        from backend.vision_identify import read_package
+
+        return read_package(data)
+    except Exception as exc:
+        logger.warning("vision indisponível: %s", exc)
+        return {"suggested_name": None, "texts": [], "error": str(exc)}
+
+
 class StockIn(schemas.BaseModel):
     quantity: int = 1
 

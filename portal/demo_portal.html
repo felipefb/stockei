@@ -143,7 +143,43 @@
     window.addEventListener("load", () => {
       observer.observe(document.getElementById("detections"), { childList: true });
       startBarcodeScanner();
+      startVisionReader();
     });
+
+    // ---------- Leitura da embalagem em tempo real (OCR local no backend) ----------
+    let nameAutoFilled = false;
+    function startVisionReader() {
+      const video = document.getElementById("video");
+      setInterval(async () => {
+        if (!video.srcObject || video.readyState < 2) return;
+        if (!sessionStorage.getItem("token")) return;
+        const blob = await captureFrame();
+        if (!blob) return;
+        const form = new FormData();
+        form.append("frame", blob, "frame.jpg");
+        try {
+          const r = await fetch("/identify/suggest-from-image", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${sessionStorage.getItem("token")}` },
+            body: form,
+          });
+          const body = await r.json();
+          if (!body.suggested_name) return;
+          const idle = document.getElementById("scan-idle");
+          if (!idle.hidden) {
+            idle.textContent = `👁 Lendo embalagem: ${body.suggested_name}`;
+          }
+          // preenche o cadastro se o usuário ainda não digitou nada
+          const input = document.getElementById("n-name");
+          if (!document.getElementById("scan-new").hidden &&
+              (input.value.trim() === "" || nameAutoFilled)) {
+            input.value = body.suggested_name;
+            input.placeholder = "Lido da embalagem — edite se precisar";
+            nameAutoFilled = true;
+          }
+        } catch (e) { /* servidor ocupado — tenta no próximo ciclo */ }
+      }, 2500);
+    }
 
     // ---------- Scanner de código de barras (BarcodeDetector nativo do Chrome) ----------
     let currentEan = null;
@@ -223,6 +259,7 @@
     async function registerProduct() {
       const name = document.getElementById("n-name").value.trim();
       if (!name) return;
+      nameAutoFilled = false;
       const r = await fetch(`/identify/${currentEan}/register`, {
         method: "POST", headers: authHeaders(), body: JSON.stringify({ name }),
       });
