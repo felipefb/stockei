@@ -72,6 +72,24 @@
             <div id="loading" class="loading" hidden>Processando…</div>
             <ul id="detections"><li class="empty">Aguardando frames…</li></ul>
           </div>
+          <div class="panel" style="margin-bottom:1rem">
+            <h2 style="font-size:1rem;margin-bottom:0.5rem">📦 Produto (código de barras)</h2>
+            <div id="scan-idle" class="loading">Aponte o código de barras para a câmera…</div>
+            <div id="scan-found" hidden>
+              <div class="stat"><span>EAN</span><b id="p-ean">—</b></div>
+              <div class="stat"><span>Produto</span><b id="p-name">—</b></div>
+              <div class="stat"><span>Em estoque</span><b id="p-qty">—</b></div>
+              <button class="btn primary" style="width:100%;margin-top:0.5rem"
+                      onclick="confirmStock()">✓ Confirmar entrada (+1)</button>
+              <p id="p-msg" class="hint"></p>
+            </div>
+            <div id="scan-new" hidden>
+              <div class="stat"><span>EAN novo</span><b id="n-ean">—</b></div>
+              <input id="n-name" placeholder="Nome do produto (ex.: Vigor Grego Tradicional 90g)"
+                     style="width:100%;padding:0.5rem;margin:0.5rem 0;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0">
+              <button class="btn primary" style="width:100%" onclick="registerProduct()">Cadastrar produto</button>
+            </div>
+          </div>
           <div class="panel">
             <h2 style="font-size:1rem;margin-bottom:0.5rem">Sessão de contagem</h2>
             <div class="stat"><span>Frames enviados</span><b id="s-frames">0</b></div>
@@ -124,7 +142,98 @@
     });
     window.addEventListener("load", () => {
       observer.observe(document.getElementById("detections"), { childList: true });
+      startBarcodeScanner();
     });
+
+    // ---------- Scanner de código de barras (BarcodeDetector nativo do Chrome) ----------
+    let currentEan = null;
+    const authHeaders = () => ({
+      "Authorization": `Bearer ${sessionStorage.getItem("token")}`,
+      "Content-Type": "application/json",
+    });
+
+    function startBarcodeScanner() {
+      const video = document.getElementById("video");
+      if ("BarcodeDetector" in window) {
+        const detector = new BarcodeDetector({
+          formats: ["ean_13", "ean_8", "upc_a", "code_128"],
+        });
+        setInterval(async () => {
+          if (!video.srcObject || video.readyState < 2) return;
+          try {
+            const codes = await detector.detect(video);
+            if (codes.length > 0) handleBarcode(codes[0].rawValue);
+          } catch (e) { /* frame não decodificável — ignora */ }
+        }, 500);
+        return;
+      }
+      // Fallback (Chrome Windows/Firefox): ZXing via CDN
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js";
+      script.onload = () => {
+        const reader = new ZXing.BrowserMultiFormatReader();
+        const canvas = document.createElement("canvas");
+        setInterval(async () => {
+          if (!video.srcObject || video.readyState < 2) return;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext("2d").drawImage(video, 0, 0);
+          try {
+            const result = await reader.decodeFromImageUrl(canvas.toDataURL("image/png"));
+            if (result) handleBarcode(result.getText());
+          } catch (e) { /* sem código no frame — ignora */ }
+        }, 700);
+      };
+      script.onerror = () => {
+        document.getElementById("scan-idle").textContent =
+          "Leitor de código de barras indisponível (sem BarcodeDetector e sem internet para o fallback).";
+      };
+      document.head.appendChild(script);
+    }
+
+    async function handleBarcode(ean) {
+      if (ean === currentEan) return; // já exibido
+      currentEan = ean;
+      const r = await fetch(`/identify/${ean}`, { headers: authHeaders() });
+      const body = await r.json();
+      document.getElementById("scan-idle").hidden = true;
+      if (body.found) showProduct(body);
+      else {
+        document.getElementById("scan-found").hidden = true;
+        document.getElementById("scan-new").hidden = false;
+        document.getElementById("n-ean").textContent = ean;
+      }
+    }
+
+    function showProduct(body) {
+      document.getElementById("scan-new").hidden = true;
+      document.getElementById("scan-found").hidden = false;
+      document.getElementById("p-ean").textContent = body.ean;
+      document.getElementById("p-name").textContent = body.product.name;
+      document.getElementById("p-qty").textContent = body.quantity;
+      document.getElementById("p-msg").textContent = "";
+    }
+
+    async function registerProduct() {
+      const name = document.getElementById("n-name").value.trim();
+      if (!name) return;
+      const r = await fetch(`/identify/${currentEan}/register`, {
+        method: "POST", headers: authHeaders(), body: JSON.stringify({ name }),
+      });
+      if (r.ok) showProduct(await r.json());
+    }
+
+    async function confirmStock() {
+      const r = await fetch(`/identify/${currentEan}/stock-in`, {
+        method: "POST", headers: authHeaders(), body: JSON.stringify({ quantity: 1 }),
+      });
+      if (r.ok) {
+        const body = await r.json();
+        document.getElementById("p-qty").textContent = body.quantity;
+        document.getElementById("p-msg").textContent =
+          `✓ Entrada registrada: ${body.product_name} — estoque ${body.quantity}`;
+      }
+    }
   </script>
   <script src="../frontend/camera_streaming.js"></script>
 </body>

@@ -411,6 +411,101 @@ def get_count(
     return _get_or_404(db, models.Inventory, inventory_id)
 
 
+# ---------- Identificação por código de barras (EAN) ----------
+def _demo_store(db: Session, user: models.User) -> models.Store:
+    """Garante cliente/loja demo para cadastros feitos pelo scanner do portal."""
+    store = db.query(models.Store).first()
+    if store is None:
+        customer = models.Customer(
+            name="Demo", cnpj=f"demo-{user.id}", email=user.email
+        )
+        db.add(customer)
+        db.flush()
+        store = models.Store(customer_id=customer.id, name="Loja Demo")
+        db.add(store)
+        db.flush()
+    return store
+
+
+@app.get("/identify/{ean}")
+def identify(
+    ean: str,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Identifica produto pelo código de barras (sku=EAN) com estoque atual."""
+    product = db.query(models.Product).filter(models.Product.sku == ean).first()
+    if product is None:
+        return {"found": False, "ean": ean}
+    inv = (
+        db.query(models.Inventory)
+        .filter(models.Inventory.product_id == product.id)
+        .first()
+    )
+    return {
+        "found": True,
+        "ean": ean,
+        "product": schemas.ProductOut.model_validate(product).model_dump(),
+        "quantity": inv.quantity if inv else 0,
+    }
+
+
+class RegisterByEan(schemas.BaseModel):
+    name: str
+
+
+@app.post("/identify/{ean}/register", status_code=201)
+def register_by_ean(
+    ean: str,
+    body: RegisterByEan,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cadastra produto novo a partir do EAN escaneado."""
+    if db.query(models.Product).filter(models.Product.sku == ean).first():
+        raise HTTPException(status_code=409, detail="EAN already registered")
+    store = _demo_store(db, user)
+    product = models.Product(store_id=store.id, sku=ean, name=body.name)
+    db.add(product)
+    db.flush()
+    db.add(models.Inventory(product_id=product.id, quantity=0))
+    db.commit()
+    db.refresh(product)
+    return {"found": True, "ean": ean,
+            "product": schemas.ProductOut.model_validate(product).model_dump(),
+            "quantity": 0}
+
+
+class StockIn(schemas.BaseModel):
+    quantity: int = 1
+
+
+@app.post("/identify/{ean}/stock-in")
+def stock_in_by_ean(
+    ean: str,
+    body: StockIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Confirma entrada em estoque do produto escaneado."""
+    product = db.query(models.Product).filter(models.Product.sku == ean).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    db.add(models.Movement(product_id=product.id, quantity=body.quantity,
+                           type="in", user_id=user.id))
+    inv = (
+        db.query(models.Inventory)
+        .filter(models.Inventory.product_id == product.id)
+        .first()
+    )
+    if inv is None:
+        inv = models.Inventory(product_id=product.id, quantity=0)
+        db.add(inv)
+    inv.quantity += body.quantity
+    db.commit()
+    return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
+
+
 # Movements
 @app.get("/movements", response_model=list[schemas.MovementOut])
 def list_movements(
