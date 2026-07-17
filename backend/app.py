@@ -465,6 +465,7 @@ def identify(
 class RegisterByEan(schemas.BaseModel):
     name: str
     source: str = "manual"  # manual | gtin | ocr
+    store_id: int | None = None  # loja destino; None = loja demo
 
 
 @app.post("/identify/{ean}/register", status_code=201)
@@ -477,7 +478,10 @@ def register_by_ean(
     """Cadastra produto novo a partir do EAN escaneado, com dados normalizados."""
     if db.query(models.Product).filter(models.Product.sku == ean).first():
         raise HTTPException(status_code=409, detail="EAN already registered")
-    store = _demo_store(db, user)
+    if body.store_id is not None:
+        store = _get_or_404(db, models.Store, body.store_id)
+    else:
+        store = _demo_store(db, user)
 
     from backend.normalizer import normalize_product
 
@@ -552,21 +556,72 @@ def stock_in_by_ean(
     return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
 
 
+# ---------- Export ----------
+@app.get("/inventory/export.csv")
+def export_inventory_csv(
+    store_id: int | None = None,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Exporta o inventário em CSV (Excel-friendly, ; como separador)."""
+    import csv
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    query = (
+        db.query(models.Product, models.Inventory, models.Store)
+        .outerjoin(models.Inventory, models.Inventory.product_id == models.Product.id)
+        .join(models.Store, models.Store.id == models.Product.store_id)
+    )
+    if store_id is not None:
+        query = query.filter(models.Product.store_id == store_id)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow([
+        "loja", "ean", "produto", "marca", "categoria", "tamanho", "unidade",
+        "preco", "quantidade", "valor_total", "ultima_contagem_em",
+    ])
+    for product, inv, store in query.all():
+        qty = inv.quantity if inv else 0
+        writer.writerow([
+            store.name, product.sku, product.name, product.brand, product.category,
+            product.size_value if product.size_value is not None else "",
+            product.size_unit,
+            f"{product.price:.2f}".replace(".", ","),
+            qty,
+            f"{qty * (product.price or 0):.2f}".replace(".", ","),
+            inv.last_counted_at.isoformat() if inv and inv.last_counted_at else "",
+        ])
+
+    buffer.seek(0)
+    filename = f"stockei_inventario_{datetime.utcnow():%Y%m%d}.csv"
+    return StreamingResponse(
+        iter(["﻿" + buffer.getvalue()]),  # BOM para acentos no Excel
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 # ---------- Dashboard ----------
 LOW_STOCK_THRESHOLD = 5
 
 
 @app.get("/dashboard/summary")
 def dashboard_summary(
+    store_id: int | None = None,
     _: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Resumo executivo do estoque: valor, categorias, alertas e movimentações."""
-    rows = (
+    products_q = (
         db.query(models.Product, models.Inventory)
         .outerjoin(models.Inventory, models.Inventory.product_id == models.Product.id)
-        .all()
     )
+    if store_id is not None:
+        products_q = products_q.filter(models.Product.store_id == store_id)
+    rows = products_q.all()
 
     total_units = 0
     stock_value = 0.0
@@ -583,13 +638,13 @@ def dashboard_summary(
         agg["units"] += qty
         agg["value"] = round(agg["value"] + qty * (product.price or 0), 2)
 
-    recent = (
+    recent_q = (
         db.query(models.Movement, models.Product)
         .join(models.Product, models.Product.id == models.Movement.product_id)
-        .order_by(models.Movement.timestamp.desc())
-        .limit(10)
-        .all()
     )
+    if store_id is not None:
+        recent_q = recent_q.filter(models.Product.store_id == store_id)
+    recent = recent_q.order_by(models.Movement.timestamp.desc()).limit(10).all()
 
     return {
         "total_products": len(rows),

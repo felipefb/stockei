@@ -780,19 +780,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /dashboard/summary:
+  /inventory/export.csv:
     get:
-      summary: Dashboard Summary
-      description: 'Resumo executivo do estoque: valor, categorias, alertas e movimentações.'
-      operationId: dashboard_summary_dashboard_summary_get
+      summary: Export Inventory Csv
+      description: Exporta o inventário em CSV (Excel-friendly, ; como separador).
+      operationId: export_inventory_csv_inventory_export_csv_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: store_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Store Id
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dashboard/summary:
+    get:
+      summary: Dashboard Summary
+      description: 'Resumo executivo do estoque: valor, categorias, alertas e movimentações.'
+      operationId: dashboard_summary_dashboard_summary_get
       security:
       - HTTPBearer: []
+      parameters:
+      - name: store_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Store Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /movements:
     get:
       summary: List Movements
@@ -1171,6 +1214,11 @@ components:
           type: string
           title: Source
           default: manual
+        store_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Store Id
       type: object
       required:
       - name

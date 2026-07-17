@@ -22,6 +22,9 @@
         <span class="brand">STOCKEI</span>
       </div>
       <div class="actions">
+        <select id="store-select" class="btn" style="appearance:auto;padding:0.55rem 0.8rem"
+                onchange="setStore(this.value)"></select>
+        <button class="btn" onclick="exportCsv()">⬇ Exportar CSV</button>
         <a class="btn" href="demo_portal.html">← Câmera</a>
         <button class="btn primary" onclick="load()">Atualizar</button>
       </div>
@@ -57,10 +60,41 @@
     const brl = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
     const TYPES = { in:"Entrada", out:"Saída", adjustment:"Ajuste" };
 
+    function activeStore() {
+      const v = sessionStorage.getItem("store_id");
+      return v ? parseInt(v, 10) : null;
+    }
+    function setStore(value) { sessionStorage.setItem("store_id", value); load(); }
+
+    async function loadStores() {
+      const token = sessionStorage.getItem("token");
+      if (!token) return;
+      const stores = await (await fetch("/stores", { headers: { Authorization: `Bearer ${token}` } })).json();
+      const sel = document.getElementById("store-select");
+      sel.innerHTML = `<option value="">Todas as lojas</option>` + stores.map(s =>
+        `<option value="${s.id}">${s.name}${s.city ? " · " + s.city : ""}</option>`).join("");
+      if (activeStore()) sel.value = activeStore();
+    }
+
+    async function exportCsv() {
+      const token = sessionStorage.getItem("token");
+      const store = activeStore();
+      const url = `/inventory/export.csv${store ? `?store_id=${store}` : ""}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const blob = await r.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `stockei_inventario_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
     async function load() {
       const token = sessionStorage.getItem("token");
       if (!token) { location.href = "demo_portal.html"; return; }
-      const r = await fetch("/dashboard/summary", { headers: { Authorization: `Bearer ${token}` } });
+      const store = activeStore();
+      const r = await fetch(`/dashboard/summary${store ? `?store_id=${store}` : ""}`,
+                            { headers: { Authorization: `Bearer ${token}` } });
       if (r.status === 401) { location.href = "demo_portal.html"; return; }
       const d = await r.json();
 
@@ -82,7 +116,7 @@
              <td class="num">${m.quantity}</td><td class="muted">${new Date(m.timestamp+"Z").toLocaleString("pt-BR")}</td></tr>`).join("")
         : "<tr><td class='muted' colspan='4'>Sem movimentações ainda</td></tr>";
     }
-    load();
+    loadStores().then(load);
     setInterval(load, 10000);
   </script>
 </body>

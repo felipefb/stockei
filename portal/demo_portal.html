@@ -37,7 +37,9 @@
           <span class="klabel">Estação de contagem</span><br>
           <span class="brand">STOCKEI</span>
         </div>
-        <div>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <select id="store-select" class="btn" style="appearance:auto;padding:0.55rem 0.8rem"
+                  onchange="setStore(this.value)"></select>
           <a class="btn primary" href="dashboard.html" style="text-decoration:none">Dashboard</a>
           <button class="btn" onclick="logout()">Sair</button>
         </div>
@@ -127,6 +129,8 @@
         sessionStorage.setItem("token", (await r.json()).access_token);
         document.getElementById("login-view").hidden = true;
         document.getElementById("dash-view").hidden = false;
+        loadStores();
+        refreshCatalog();
       } catch (e) {
         err.textContent = `Falha no login: ${e.message}. O backend está rodando?`;
       }
@@ -270,9 +274,29 @@
       nameAutoFilled = false;
       const r = await fetch(`/identify/${currentEan}/register`, {
         method: "POST", headers: authHeaders(),
-        body: JSON.stringify({ name, source: nameSource }),
+        body: JSON.stringify({ name, source: nameSource, store_id: activeStore() }),
       });
       if (r.ok) { showProduct(await r.json()); refreshCatalog(); }
+    }
+
+    // ---------- Multi-loja ----------
+    function activeStore() {
+      const v = sessionStorage.getItem("store_id");
+      return v ? parseInt(v, 10) : null;
+    }
+    function setStore(value) {
+      sessionStorage.setItem("store_id", value);
+      refreshCatalog();
+    }
+    async function loadStores() {
+      try {
+        const stores = await (await fetch("/stores", { headers: authHeaders() })).json();
+        const sel = document.getElementById("store-select");
+        sel.innerHTML = stores.map(s =>
+          `<option value="${s.id}">${s.name}${s.city ? " · " + s.city : ""}</option>`).join("");
+        if (!activeStore() && stores.length) sessionStorage.setItem("store_id", stores[0].id);
+        if (activeStore()) sel.value = activeStore();
+      } catch (e) { /* sem sessão */ }
     }
 
     async function refreshCatalog() {
@@ -281,10 +305,12 @@
           (await fetch("/products", { headers: authHeaders() })).json(),
           (await fetch("/inventory", { headers: authHeaders() })).json(),
         ]);
+        const store = activeStore();
+        const filtered = store ? products.filter(p => p.store_id === store) : products;
         const qty = Object.fromEntries(inventory.map(i => [i.product_id, i.quantity]));
         const box = document.getElementById("catalog");
-        if (!products.length) { box.innerHTML = "<span class='loading'>Nenhum produto cadastrado</span>"; return; }
-        box.innerHTML = products.map(p => {
+        if (!filtered.length) { box.innerHTML = "<span class='loading'>Nenhum produto nesta loja</span>"; return; }
+        box.innerHTML = filtered.map(p => {
           const meta = [p.brand, p.category, p.size_value ? `${p.size_value}${p.size_unit}` : null]
             .filter(Boolean).join(" · ");
           return `<div class="stat"><span>${p.name}<br><small style="color:#64748b">${meta || p.sku}</small></span><b>${qty[p.id] ?? 0}</b></div>`;
