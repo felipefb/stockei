@@ -526,6 +526,33 @@ async def suggest_from_image(
         return {"suggested_name": None, "texts": [], "error": str(exc)}
 
 
+@app.post("/identify/ai-suggest")
+async def ai_suggest(
+    frame: UploadFile = File(...),
+    _: models.User = Depends(get_current_user),
+):
+    """Identificação por IA multimodal (sob demanda; respeita teto diário)."""
+    from backend.ai_identify import AILimitReached, identify_package, usage_stats
+
+    data = await frame.read()
+    try:
+        result = identify_package(data)
+        return {**result, "usage": usage_stats()}
+    except AILimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except Exception as exc:
+        logger.warning("IA indisponível: %s", exc)
+        raise HTTPException(status_code=503, detail=f"IA indisponível: {exc}")
+
+
+@app.get("/ai/usage")
+def ai_usage(_: models.User = Depends(get_current_user)):
+    """Contador de uso e custo estimado da identificação por IA."""
+    from backend.ai_identify import usage_stats
+
+    return usage_stats()
+
+
 class StockIn(schemas.BaseModel):
     quantity: int = 1
 

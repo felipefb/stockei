@@ -58,3 +58,5 @@ test_stockei.db
 
 .coverage
 qa/coverage_report/
+
+ai_usage.json
