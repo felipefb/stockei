@@ -462,10 +462,20 @@ def identify(
     }
 
 
+# Estoque mínimo padrão por categoria (giro típico do varejo de bairro)
+MIN_STOCK_BY_CATEGORY = {
+    "Bebidas": 12, "Laticínios": 8, "Mercearia": 10,
+    "Higiene": 6, "Limpeza": 6, "Medicamentos": 10, "Acessórios": 3,
+}
+DEFAULT_MIN_STOCK = 5
+
+
 class RegisterByEan(schemas.BaseModel):
     name: str
     source: str = "manual"  # manual | gtin | ocr
     store_id: int | None = None  # loja destino; None = loja demo
+    price: float = 0.0
+    min_stock: int | None = None  # None = padrão inteligente por categoria
 
 
 @app.post("/identify/{ean}/register", status_code=201)
@@ -496,10 +506,13 @@ def register_by_ean(
         size_unit=norm["size_unit"] or "",
         name_raw=norm["name_raw"],
         source=body.source,
+        price=body.price or 0.0,
     )
     db.add(product)
     db.flush()
-    db.add(models.Inventory(product_id=product.id, quantity=0))
+    min_stock = body.min_stock if body.min_stock is not None else \
+        MIN_STOCK_BY_CATEGORY.get(norm["category"] or "", DEFAULT_MIN_STOCK)
+    db.add(models.Inventory(product_id=product.id, quantity=0, min_stock=min_stock))
     db.commit()
     db.refresh(product)
     return {"found": True, "ean": ean,
@@ -952,7 +965,7 @@ def export_inventory_csv(
     writer = csv.writer(buffer, delimiter=";")
     writer.writerow([
         "loja", "ean", "produto", "marca", "categoria", "tamanho", "unidade",
-        "preco", "quantidade", "valor_total", "ultima_contagem_em",
+        "preco", "quantidade", "estoque_minimo", "valor_total", "ultima_contagem_em",
     ])
     for product, inv, store in query.all():
         qty = inv.quantity if inv else 0
@@ -962,6 +975,7 @@ def export_inventory_csv(
             product.size_unit,
             f"{product.price:.2f}".replace(".", ","),
             qty,
+            inv.min_stock if inv else 5,
             f"{qty * (product.price or 0):.2f}".replace(".", ","),
             inv.last_counted_at.isoformat() if inv and inv.last_counted_at else "",
         ])
@@ -1002,8 +1016,11 @@ def dashboard_summary(
         qty = inv.quantity if inv else 0
         total_units += qty
         stock_value += qty * (product.price or 0)
-        if qty < LOW_STOCK_THRESHOLD:
-            low_stock.append({"name": product.name, "quantity": qty, "sku": product.sku})
+        # alerta respeita o estoque mínimo definido POR PRODUTO
+        min_stock = inv.min_stock if inv else LOW_STOCK_THRESHOLD
+        if qty < min_stock:
+            low_stock.append({"name": product.name, "quantity": qty,
+                              "min_stock": min_stock, "sku": product.sku})
         cat = product.category or "Sem categoria"
         agg = by_category.setdefault(cat, {"category": cat, "units": 0, "value": 0.0})
         agg["units"] += qty

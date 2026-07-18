@@ -103,6 +103,13 @@
             <div id="scan-new" hidden>
               <input id="n-name" placeholder="Nome do produto (ex.: Vigor Grego Tradicional 90g)"
                      style="width:100%;padding:0.5rem;margin:0.5rem 0;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0">
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+                <input id="n-price" type="number" step="0.01" min="0" inputmode="decimal"
+                       placeholder="Preço R$ (opcional)" class="mono" style="flex:1">
+                <input id="n-min" type="number" min="0" inputmode="numeric"
+                       placeholder="Mín. auto" class="mono" style="width:104px"
+                       title="Estoque mínimo — vazio usa o padrão da categoria">
+              </div>
               <button class="btn primary" style="width:100%" onclick="registerProduct()">Cadastrar produto</button>
               <button class="btn" style="width:100%;margin-top:0.4rem" id="btn-ai" onclick="aiIdentify()">🤖 Identificar com IA</button>
               <p id="ai-status" class="hint"></p>
@@ -359,9 +366,13 @@
       const name = document.getElementById("n-name").value.trim();
       if (!name) return;
       nameAutoFilled = false;
+      const price = parseFloat(document.getElementById("n-price").value) || 0;
+      const minRaw = document.getElementById("n-min").value.trim();
+      const payload = { name, source: nameSource, store_id: activeStore(), price };
+      if (minRaw !== "") payload.min_stock = parseInt(minRaw, 10);
       const r = await fetch(`/identify/${currentEan}/register`, {
         method: "POST", headers: authHeaders(),
-        body: JSON.stringify({ name, source: nameSource, store_id: activeStore() }),
+        body: JSON.stringify(payload),
       });
       if (r.ok) {
         capture.known = true;
