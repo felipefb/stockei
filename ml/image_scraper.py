@@ -24,13 +24,27 @@ MIN_SIDE = 250          # descarta thumbnails minúsculos
 TIMEOUT = 12
 
 DEFAULT_QUERIES = [
-    "data de validade estampada lata",
-    "data validade jato de tinta embalagem",
-    "validade impressa tampa pote",
-    "lote validade gravado metal lata",
-    "data de validade embalagem produto brasil",
-    "expiration date stamped can lid",
-    "expiry date inkjet printed package",
+    # latas brasileiras — os casos que o piloto encontra na prateleira
+    "data de validade fundo da lata leite condensado",
+    "data de validade lata leite em pó ninho",
+    "data de validade lata de milho ervilha",
+    "validade lata de sardinha atum",
+    "data de validade lata cerveja fundo",
+    "data validade lata refrigerante alumínio",
+    "leite ninho lata validade lote",
+    # metálicos / relevo / gravação — o que ofusca a câmera
+    "validade gravada em relevo lata alumínio",
+    "data de validade estampada metal lote",
+    "embossed expiration date aluminum can bottom",
+    "engraved expiry date tin can",
+    # casos difíceis de ler no celular
+    "data de validade borrada apagada embalagem",
+    "data validade jato de tinta pontilhada",
+    "data de validade reflexo embalagem plástica",
+    "lote validade impressos tampa metálica",
+    # importados/enlatados em geral
+    "canned food expiration date stamp bottom",
+    "imported canned goods expiry date printed",
 ]
 
 
