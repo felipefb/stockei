@@ -125,6 +125,39 @@ class Movement(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
+class InventorySession(Base):
+    """Evento de inventário: abrir → contar → aprovar (gera ajustes) ou descartar."""
+
+    __tablename__ = "inventory_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open|approved|discarded
+    accuracy_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    counts: Mapped[list["InventoryCount"]] = relationship(back_populates="session")
+
+
+class InventoryCount(Base):
+    """Contagem de um produto dentro de uma sessão (expected vs counted)."""
+
+    __tablename__ = "inventory_counts"
+    __table_args__ = (Index("ix_invcount_session_product", "session_id", "product_id",
+                            unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("inventory_sessions.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    expected: Mapped[int] = mapped_column(Integer, default=0)
+    counted: Mapped[int] = mapped_column(Integer, default=0)
+    counted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    session: Mapped[InventorySession] = relationship(back_populates="counts")
+
+
 class Person(Base):
     __tablename__ = "people"
 

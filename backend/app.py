@@ -644,6 +644,244 @@ def stock_in_by_ean(
     return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
 
 
+# ---------- Sessões de Inventário (P16) ----------
+class SessionCreate(schemas.BaseModel):
+    store_id: int
+
+
+class CountIn(schemas.BaseModel):
+    ean: str
+    counted: int
+
+
+def _session_detail(db: Session, sess: models.InventorySession) -> dict:
+    items = []
+    divergent = 0
+    for c in sess.counts:
+        product = db.get(models.Product, c.product_id)
+        diff = c.counted - c.expected
+        divergent += diff != 0
+        items.append({
+            "product_id": c.product_id, "name": product.name if product else "?",
+            "sku": product.sku if product else "", "expected": c.expected,
+            "counted": c.counted, "diff": diff,
+        })
+    total = len(items)
+    return {
+        "id": sess.id, "store_id": sess.store_id, "status": sess.status,
+        "created_at": sess.created_at.isoformat(),
+        "closed_at": sess.closed_at.isoformat() if sess.closed_at else None,
+        "accuracy_pct": sess.accuracy_pct,
+        "items": sorted(items, key=lambda i: (i["diff"] == 0, i["name"])),
+        "total_items": total, "divergent_items": divergent,
+    }
+
+
+@app.get("/inventory/sessions")
+def list_sessions(
+    store_id: int | None = None,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    q = db.query(models.InventorySession).order_by(models.InventorySession.id.desc())
+    if store_id is not None:
+        q = q.filter(models.InventorySession.store_id == store_id)
+    return [
+        {"id": s.id, "store_id": s.store_id, "status": s.status,
+         "created_at": s.created_at.isoformat(), "accuracy_pct": s.accuracy_pct,
+         "items": len(s.counts)}
+        for s in q.limit(50).all()
+    ]
+
+
+@app.post("/inventory/sessions", status_code=201)
+def open_session(
+    body: SessionCreate,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_or_404(db, models.Store, body.store_id)
+    open_exists = (
+        db.query(models.InventorySession)
+        .filter(models.InventorySession.store_id == body.store_id,
+                models.InventorySession.status == "open")
+        .first()
+    )
+    if open_exists:
+        raise HTTPException(status_code=409,
+                            detail=f"Sessão {open_exists.id} já está aberta nesta loja")
+    sess = models.InventorySession(store_id=body.store_id, user_id=user.id)
+    db.add(sess)
+    db.commit()
+    db.refresh(sess)
+    return _session_detail(db, sess)
+
+
+@app.get("/inventory/sessions/{session_id}")
+def get_session(
+    session_id: int,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _session_detail(db, _get_or_404(db, models.InventorySession, session_id))
+
+
+@app.post("/inventory/sessions/{session_id}/counts")
+def record_count(
+    session_id: int,
+    body: CountIn,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sess = _get_or_404(db, models.InventorySession, session_id)
+    if sess.status != "open":
+        raise HTTPException(status_code=409, detail="Sessão não está aberta")
+    product = (
+        db.query(models.Product)
+        .filter(models.Product.sku == body.ean,
+                models.Product.store_id == sess.store_id)
+        .first()
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="Produto não encontrado nesta loja")
+    inv = (
+        db.query(models.Inventory)
+        .filter(models.Inventory.product_id == product.id)
+        .first()
+    )
+    expected = inv.quantity if inv else 0
+
+    count = (
+        db.query(models.InventoryCount)
+        .filter(models.InventoryCount.session_id == sess.id,
+                models.InventoryCount.product_id == product.id)
+        .first()
+    )
+    if count is None:
+        count = models.InventoryCount(session_id=sess.id, product_id=product.id)
+        db.add(count)
+    count.expected = expected
+    count.counted = body.counted
+    count.counted_at = datetime.utcnow()
+    db.commit()
+    return {"product": product.name, "expected": expected,
+            "counted": body.counted, "diff": body.counted - expected}
+
+
+@app.post("/inventory/sessions/{session_id}/approve")
+def approve_session(
+    session_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aprova a sessão: gera ajustes para as divergências e fecha com acuracidade."""
+    sess = _get_or_404(db, models.InventorySession, session_id)
+    if sess.status != "open":
+        raise HTTPException(status_code=409, detail="Sessão não está aberta")
+    if not sess.counts:
+        raise HTTPException(status_code=422, detail="Sessão sem contagens")
+
+    adjustments = 0
+    for c in sess.counts:
+        if c.counted == c.expected:
+            continue
+        db.add(models.Movement(product_id=c.product_id, quantity=c.counted,
+                               type="adjustment", user_id=user.id))
+        inv = (
+            db.query(models.Inventory)
+            .filter(models.Inventory.product_id == c.product_id)
+            .first()
+        )
+        if inv is None:
+            inv = models.Inventory(product_id=c.product_id)
+            db.add(inv)
+        inv.last_count = inv.quantity
+        inv.quantity = c.counted
+        inv.last_counted_at = datetime.utcnow()
+        adjustments += 1
+
+    sess.status = "approved"
+    sess.closed_at = datetime.utcnow()
+    sess.accuracy_pct = round(100 * (len(sess.counts) - adjustments) / len(sess.counts), 1)
+    db.commit()
+    return {"session_id": sess.id, "adjustments": adjustments,
+            "accuracy_pct": sess.accuracy_pct}
+
+
+@app.post("/inventory/sessions/{session_id}/discard")
+def discard_session(
+    session_id: int,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sess = _get_or_404(db, models.InventorySession, session_id)
+    if sess.status != "open":
+        raise HTTPException(status_code=409, detail="Sessão não está aberta")
+    sess.status = "discarded"
+    sess.closed_at = datetime.utcnow()
+    db.commit()
+    return {"session_id": sess.id, "status": sess.status}
+
+
+@app.get("/inventory/position")
+def inventory_position(
+    date: str | None = None,
+    store_id: int | None = None,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Posição de estoque na data (fim do dia), reconstruída pelo replay dos
+    movimentos (in soma, out subtrai, adjustment define o valor absoluto).
+    Sem data, retorna a posição atual.
+    """
+    products_q = db.query(models.Product)
+    if store_id is not None:
+        products_q = products_q.filter(models.Product.store_id == store_id)
+    products = products_q.all()
+
+    if date is None:
+        cutoff = None
+    else:
+        try:
+            cutoff = datetime.fromisoformat(date).replace(hour=23, minute=59, second=59)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Data inválida (use YYYY-MM-DD)")
+
+    rows = []
+    for product in products:
+        if cutoff is None:
+            inv = (
+                db.query(models.Inventory)
+                .filter(models.Inventory.product_id == product.id)
+                .first()
+            )
+            qty = inv.quantity if inv else 0
+        else:
+            qty = 0
+            movements = (
+                db.query(models.Movement)
+                .filter(models.Movement.product_id == product.id,
+                        models.Movement.timestamp <= cutoff)
+                .order_by(models.Movement.timestamp)
+                .all()
+            )
+            for m in movements:
+                if m.type == "in":
+                    qty += m.quantity
+                elif m.type == "out":
+                    qty = max(0, qty - m.quantity)
+                else:  # adjustment define valor absoluto
+                    qty = m.quantity
+        rows.append({"sku": product.sku, "name": product.name, "quantity": qty,
+                     "value": round(qty * (product.price or 0), 2)})
+
+    return {"date": date or "atual", "store_id": store_id,
+            "total_units": sum(r["quantity"] for r in rows),
+            "total_value": round(sum(r["value"] for r in rows), 2),
+            "items": sorted(rows, key=lambda r: -r["value"])}
+
+
 # ---------- Export ----------
 @app.get("/inventory/export.csv")
 def export_inventory_csv(
