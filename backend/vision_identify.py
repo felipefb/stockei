@@ -25,7 +25,9 @@ def _get_ocr():
 # Textos de embalagem que não descrevem o produto
 _NOISE = re.compile(
     r"^(made in|ind[uú]stria|conte[uú]do|peso|lote|val|venc|fab|www\.|sac|cnpj|"
-    r"\d{6,}|[\d.,]+\s*(g|kg|ml|l)?)$",
+    r"\d{6,}|[\d.,]+\s*(g|kg|ml|l)?)$"
+    r"|\b(val|venc|fab|exp|lote)[.:\s]*\d"    # rótulos de data (VAL 12/2027)
+    r"|\d{2}[/\-.]\d{2}([/\-.]\d{2,4})?",     # a própria data
     re.IGNORECASE,
 )
 
@@ -55,7 +57,7 @@ def read_package(image_bytes: bytes, max_parts: int = 4) -> dict:
     parts, seen = [], set()
     for t in ranked:
         word = t["text"]
-        if _NOISE.match(word) or word.lower() in seen:
+        if _NOISE.search(word) or word.lower() in seen:
             continue
         seen.add(word.lower())
         parts.append(word)

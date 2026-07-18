@@ -526,6 +526,39 @@ async def suggest_from_image(
         return {"suggested_name": None, "texts": [], "error": str(exc)}
 
 
+@app.post("/identify/scan-frame")
+async def scan_frame(
+    frame: UploadFile = File(...),
+    _: models.User = Depends(get_current_user),
+):
+    """
+    Escaneamento unificado: UMA passada de OCR no frame extrai ao mesmo tempo
+    a sugestão de nome do produto e a data de validade (aceita datas vencidas,
+    sinalizadas com expired=true). O código de barras é lido no cliente.
+    """
+    from backend.vision_identify import read_package
+    from ml.date_validation import extract_date
+
+    data = await frame.read()
+    try:
+        package = read_package(data)
+    except Exception as exc:
+        logger.warning("OCR indisponível: %s", exc)
+        return {"suggested_name": None, "expiry": None, "error": str(exc)}
+
+    expiry = None
+    for t in package["texts"]:
+        result = extract_date(t["text"])
+        if result["date"]:  # data plausível (válida OU vencida)
+            is_expired = result.get("error") == "Produto vencido"
+            if result["valid"] or is_expired:
+                expiry = {"date": result["date"], "expired": is_expired,
+                          "source_text": t["text"]}
+                break
+
+    return {"suggested_name": package["suggested_name"], "expiry": expiry}
+
+
 @app.post("/identify/expiry-from-image")
 async def expiry_from_image(
     frame: UploadFile = File(...),

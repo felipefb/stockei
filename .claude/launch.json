@@ -5,8 +5,8 @@
       "name": "stockei-api",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "backend.serve"],
-      "port": 8000,
-      "autoPort": true
+      "port": 8765,
+      "autoPort": false
     }
   ]
 }
