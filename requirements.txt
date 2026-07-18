@@ -28,3 +28,5 @@ mypy>=0.950
 
 # Logging
 python-json-logger>=2.0
+
+zxing-cpp>=2.2

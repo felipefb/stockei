@@ -56,6 +56,27 @@
     let queue = [];
     let current = null;
 
+    // Fila local: todo veredito é salvo NO APARELHO antes de ir ao servidor.
+    // Se a rede/sessão falhar, fica pendente e sincroniza na próxima carga.
+    const PENDING_KEY = "stockei_curation_pending";
+    const localPending = () => JSON.parse(localStorage.getItem(PENDING_KEY) || "[]");
+    const setLocalPending = (arr) => localStorage.setItem(PENDING_KEY, JSON.stringify(arr));
+
+    async function syncPending() {
+      const items = localPending();
+      if (!items.length) return 0;
+      const remaining = [];
+      for (const item of items) {
+        try {
+          const r = await fetch("/dataset/curate", { method: "POST", headers: H,
+                                                     body: JSON.stringify(item) });
+          if (!r.ok && r.status !== 404) remaining.push(item); // 404 = já resolvida
+        } catch (e) { remaining.push(item); }
+      }
+      setLocalPending(remaining);
+      return items.length - remaining.length;
+    }
+
     function toIso(raw) {
       if (!raw) return null;
       let m;
@@ -72,10 +93,20 @@
     }
 
     async function load() {
-      const d = await (await fetch("/dataset/pending", { headers: H })).json();
+      // valida a sessão ANTES de deixar trabalhar — token morto = login já
+      const me = await fetch("/users/me", { headers: H });
+      if (!me.ok) {
+        alert("Sessão expirada — faça login e volte. Nenhum trabalho será perdido.");
+        location.href = "demo_portal.html";
+        return;
+      }
+      const synced = await syncPending();  // recupera vereditos presos de antes
+      const r = await fetch("/dataset/pending", { headers: H });
+      const d = await r.json();
       queue = d.pending;
       document.getElementById("counts").textContent =
-        `${queue.length} pendentes · ${d.kept} mantidas · ${d.discarded} fora`;
+        `${queue.length} pendentes · ${d.kept} mantidas · ${d.discarded} fora` +
+        (synced ? ` · ${synced} recuperadas` : "");
       next();
     }
 
@@ -97,21 +128,20 @@
         document.getElementById("true-date").focus();
         return; // formato inválido — não avança
       }
-      // NUNCA avança sem confirmação do servidor — veredito perdido é
-      // trabalho humano jogado fora
-      const r = await fetch("/dataset/curate", {
-        method: "POST", headers: H,
-        body: JSON.stringify({ file: current.file, keep, true_date: keep ? iso : null }),
-      });
-      if (r.status === 401) {
-        alert("Sessão expirada — entre de novo. Seus vereditos anteriores estão salvos.");
-        location.href = "demo_portal.html";
-        return;
-      }
-      if (!r.ok) {
-        alert(`Falha ao salvar (${r.status}) — este veredito NÃO foi gravado. Tente de novo.`);
-        return;
-      }
+      // 1) grava no aparelho; 2) tenta o servidor; 3) se falhar, fica na fila
+      const verdictBody = { file: current.file, keep, true_date: keep ? iso : null };
+      setLocalPending([...localPending(), verdictBody]);
+      try {
+        const r = await fetch("/dataset/curate", {
+          method: "POST", headers: H, body: JSON.stringify(verdictBody) });
+        if (r.status === 401) {
+          alert("Sessão expirou — este veredito ficou salvo no aparelho e será " +
+                "enviado quando você entrar de novo.");
+          location.href = "demo_portal.html";
+          return;
+        }
+        if (r.ok) setLocalPending(localPending().filter(p => p.file !== verdictBody.file));
+      } catch (e) { /* offline: fica na fila local, sincroniza depois */ }
       const c = document.getElementById("counts");
       c.textContent = c.textContent.replace(/^\d+/, m => m - 1);
       next();
