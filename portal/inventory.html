@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stockei — Inventário</title>
+  <link rel="stylesheet" href="../frontend/camera_styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0a0b10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+  <style>
+    .layout { max-width: 900px; margin: 0 auto; padding: 1.25rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.3rem; }
+    .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 860px) { .grid { grid-template-columns: 1fr 1.4fr; } }
+    .sess { cursor: pointer; }
+    .sess.active { border-color: var(--lime); }
+    .diff-pos { color: var(--lime); font-weight: 700; }
+    .diff-neg { color: var(--danger); font-weight: 700; }
+    input.small { max-width: 110px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="topbar">
+      <div>
+        <span class="klabel">Inventário</span><br>
+        <span class="brand">STOCKEI</span>
+      </div>
+      <div class="row">
+        <a class="btn" href="index.html">☰ Menu</a>
+        <button class="btn primary" onclick="openSession()">+ Nova sessão</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>Sessões</h2>
+        <div id="sessions"><span class="loading">—</span></div>
+      </div>
+
+      <div class="panel" id="detail-panel" hidden>
+        <h2 id="detail-title">Sessão</h2>
+
+        <div class="row" id="count-form" style="margin-bottom:0.9rem" hidden>
+          <input id="c-ean" placeholder="EAN (bipe ou digite)" class="mono">
+          <input id="c-qty" class="small mono" type="number" min="0" placeholder="Qtd">
+          <button class="btn primary" onclick="saveCount()">Contar</button>
+        </div>
+        <p class="hint" id="count-msg"></p>
+
+        <table>
+          <thead><tr><th>Produto</th><th style="text-align:right">Sistema</th>
+                 <th style="text-align:right">Contado</th><th style="text-align:right">Dif.</th></tr></thead>
+          <tbody id="items"><tr><td class="muted" colspan="4">Sem contagens ainda</td></tr></tbody>
+        </table>
+
+        <div class="row" style="margin-top:1rem" id="actions" hidden>
+          <button class="btn primary" onclick="approve()">✓ Aprovar ajustes</button>
+          <button class="btn danger" onclick="discard()">Descartar</button>
+        </div>
+        <p class="hint" id="result-msg"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = sessionStorage.getItem("token");
+    if (!token) location.href = "demo_portal.html";
+    const H = { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+    const storeId = () => parseInt(sessionStorage.getItem("store_id") || "0", 10) || null;
+    let current = null;
+
+    async function loadSessions() {
+      const sid = storeId();
+      const list = await (await fetch(`/inventory/sessions${sid ? `?store_id=${sid}` : ""}`,
+                                      { headers: H })).json();
+      const box = document.getElementById("sessions");
+      if (!list.length) { box.innerHTML = "<span class='loading'>Nenhuma sessão — abra a primeira.</span>"; return; }
+      box.innerHTML = list.map(s => `
+        <div class="stat sess ${current === s.id ? "active" : ""}" onclick="show(${s.id})">
+          <span>#${s.id} · ${new Date(s.created_at + "Z").toLocaleDateString("pt-BR")}
+                <small>(${s.items} itens)</small></span>
+          <b>${s.status === "open" ? "ABERTA" : s.status === "approved"
+              ? `${s.accuracy_pct ?? "—"}% acur.` : "descartada"}</b>
+        </div>`).join("");
+    }
+
+    async function openSession() {
+      const sid = storeId();
+      if (!sid) { alert("Selecione a loja na Estação de contagem primeiro."); return; }
+      const r = await fetch("/inventory/sessions", { method: "POST", headers: H,
+                            body: JSON.stringify({ store_id: sid }) });
+      const body = await r.json();
+      if (!r.ok) { alert(body.detail); return; }
+      await loadSessions();
+      show(body.id);
+    }
+
+    async function show(id) {
+      current = id;
+      const d = await (await fetch(`/inventory/sessions/${id}`, { headers: H })).json();
+      document.getElementById("detail-panel").hidden = false;
+      document.getElementById("detail-title").textContent =
+        `Sessão #${d.id} — ${d.status.toUpperCase()}` +
+        (d.accuracy_pct != null ? ` · acuracidade ${d.accuracy_pct}%` : "");
+      const isOpen = d.status === "open";
+      document.getElementById("count-form").hidden = !isOpen;
+      document.getElementById("actions").hidden = !isOpen || d.total_items === 0;
+      document.getElementById("items").innerHTML = d.items.length
+        ? d.items.map(i => `
+            <tr><td>${i.name}</td><td class="num">${i.expected}</td>
+                <td class="num">${i.counted}</td>
+                <td class="num ${i.diff > 0 ? "diff-pos" : i.diff < 0 ? "diff-neg" : "muted"}">
+                  ${i.diff > 0 ? "+" : ""}${i.diff}</td></tr>`).join("")
+        : "<tr><td class='muted' colspan='4'>Sem contagens ainda</td></tr>";
+      loadSessions();
+    }
+
+    async function saveCount() {
+      const ean = document.getElementById("c-ean").value.trim();
+      const qty = parseInt(document.getElementById("c-qty").value, 10);
+      const msg = document.getElementById("count-msg");
+      if (!ean || isNaN(qty)) { msg.textContent = "Informe EAN e quantidade."; return; }
+      const r = await fetch(`/inventory/sessions/${current}/counts`, {
+        method: "POST", headers: H, body: JSON.stringify({ ean, counted: qty }) });
+      const body = await r.json();
+      msg.textContent = r.ok
+        ? `✓ ${body.product}: sistema ${body.expected} → contado ${body.counted}`
+        : body.detail;
+      if (r.ok) {
+        document.getElementById("c-ean").value = "";
+        document.getElementById("c-qty").value = "";
+        document.getElementById("c-ean").focus();
+        show(current);
+      }
+    }
+
+    async function approve() {
+      const r = await fetch(`/inventory/sessions/${current}/approve`, { method: "POST", headers: H });
+      const body = await r.json();
+      document.getElementById("result-msg").textContent = r.ok
+        ? `✓ ${body.adjustments} ajustes aplicados · acuracidade ${body.accuracy_pct}%`
+        : body.detail;
+      show(current);
+    }
+
+    async function discard() {
+      await fetch(`/inventory/sessions/${current}/discard`, { method: "POST", headers: H });
+      show(current);
+    }
+
+    loadSessions();
+  </script>
+</body>
+</html>
