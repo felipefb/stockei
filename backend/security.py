@@ -11,8 +11,9 @@ import secrets
 import time
 
 SECRET_KEY = os.environ.get("STOCKEI_SECRET_KEY", "dev-secret-change-in-production")
-ACCESS_TOKEN_TTL = 60 * 30        # 30 min
-REFRESH_TOKEN_TTL = 60 * 60 * 24  # 24 h
+# Piloto: sessões longas evitam perda silenciosa de trabalho (curadoria/contagem).
+ACCESS_TOKEN_TTL = int(os.environ.get("ACCESS_TOKEN_TTL", 60 * 60 * 12))   # 12 h
+REFRESH_TOKEN_TTL = int(os.environ.get("REFRESH_TOKEN_TTL", 60 * 60 * 24 * 7))  # 7 d
 _PBKDF2_ITERATIONS = 100_000
 
 

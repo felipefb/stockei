@@ -47,6 +47,24 @@ DEFAULT_QUERIES = [
     "imported canned goods expiry date printed",
 ]
 
+# banco de códigos de barras do varejo — variedade de suportes e defeitos
+BARCODE_QUERIES = [
+    "código de barras produto supermercado embalagem",
+    "código de barras ean 13 produto brasil",
+    "código de barras garrafa curva refrigerante",
+    "código de barras lata alumínio",
+    "código de barras embalagem plástica reflexo",
+    "código de barras amassado embalagem",
+    "código de barras pequeno produto farmácia",
+    "código de barras impresso saco plástico",
+    "barcode on curved bottle product",
+    "barcode wrinkled plastic package",
+    "barcode glossy label reflection product",
+    "ean barcode product shelf supermarket",
+]
+
+QUERY_SETS = {"validades": DEFAULT_QUERIES, "barcodes": BARCODE_QUERIES}
+
 
 def _download(url: str, dest: Path) -> bool:
     import httpx
@@ -119,7 +137,9 @@ def scrape(queries: list[str], per_query: int = 30) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--queries", nargs="*", default=DEFAULT_QUERIES)
+    parser.add_argument("--set", choices=list(QUERY_SETS), default="validades",
+                        help="conjunto de queries: validades ou barcodes")
+    parser.add_argument("--queries", nargs="*", default=None)
     parser.add_argument("--per-query", type=int, default=30)
     args = parser.parse_args()
-    scrape(args.queries, args.per_query)
+    scrape(args.queries or QUERY_SETS[args.set], args.per_query)

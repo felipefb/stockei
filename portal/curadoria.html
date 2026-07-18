@@ -97,10 +97,21 @@
         document.getElementById("true-date").focus();
         return; // formato inválido — não avança
       }
-      await fetch("/dataset/curate", {
+      // NUNCA avança sem confirmação do servidor — veredito perdido é
+      // trabalho humano jogado fora
+      const r = await fetch("/dataset/curate", {
         method: "POST", headers: H,
         body: JSON.stringify({ file: current.file, keep, true_date: keep ? iso : null }),
       });
+      if (r.status === 401) {
+        alert("Sessão expirada — entre de novo. Seus vereditos anteriores estão salvos.");
+        location.href = "demo_portal.html";
+        return;
+      }
+      if (!r.ok) {
+        alert(`Falha ao salvar (${r.status}) — este veredito NÃO foi gravado. Tente de novo.`);
+        return;
+      }
       const c = document.getElementById("counts");
       c.textContent = c.textContent.replace(/^\d+/, m => m - 1);
       next();
