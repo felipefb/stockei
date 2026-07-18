@@ -539,6 +539,18 @@ async def scan_frame(
     from backend.vision_identify import read_package
     from ml.date_validation import extract_date
 
+    from backend.vision_identify import enhance_for_ocr
+
+    def _find_expiry(texts):
+        for t in texts:
+            result = extract_date(t["text"])
+            if result["date"]:  # data plausível (válida OU vencida)
+                is_expired = result.get("error") == "Produto vencido"
+                if result["valid"] or is_expired:
+                    return {"date": result["date"], "expired": is_expired,
+                            "source_text": t["text"]}
+        return None
+
     data = await frame.read()
     try:
         package = read_package(data)
@@ -546,15 +558,15 @@ async def scan_frame(
         logger.warning("OCR indisponível: %s", exc)
         return {"suggested_name": None, "expiry": None, "error": str(exc)}
 
-    expiry = None
-    for t in package["texts"]:
-        result = extract_date(t["text"])
-        if result["date"]:  # data plausível (válida OU vencida)
-            is_expired = result.get("error") == "Produto vencido"
-            if result["valid"] or is_expired:
-                expiry = {"date": result["date"], "expired": is_expired,
-                          "source_text": t["text"]}
-                break
+    expiry = _find_expiry(package["texts"])
+
+    # datas de jato de tinta/baixo contraste: segunda passada com realce
+    if expiry is None:
+        try:
+            enhanced = read_package(enhance_for_ocr(data))
+            expiry = _find_expiry(enhanced["texts"])
+        except Exception as exc:
+            logger.debug("passada com realce falhou: %s", exc)
 
     return {"suggested_name": package["suggested_name"], "expiry": expiry}
 

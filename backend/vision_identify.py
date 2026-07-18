@@ -69,6 +69,24 @@ def read_package(image_bytes: bytes, max_parts: int = 4) -> dict:
     return {"suggested_name": suggested, "texts": texts}
 
 
+def enhance_for_ocr(image_bytes: bytes) -> bytes:
+    """
+    Pré-processamento agressivo para datas difíceis (jato de tinta, baixo
+    contraste): escala de cinza + autocontraste + nitidez + upscale 1.6x.
+    """
+    import io
+
+    from PIL import Image, ImageFilter, ImageOps
+
+    img = Image.open(io.BytesIO(image_bytes)).convert("L")
+    img = ImageOps.autocontrast(img, cutoff=2)
+    img = img.filter(ImageFilter.SHARPEN)
+    img = img.resize((int(img.width * 1.6), int(img.height * 1.6)))
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, "JPEG", quality=92)
+    return buf.getvalue()
+
+
 def _prettify(name: str) -> str:
     """CamelCase colado do OCR -> espaçado; capitalização de título."""
     name = re.sub(r"(?<=[a-záéíóúç])(?=[A-ZÁÉÍÓÚÇ])", " ", name)

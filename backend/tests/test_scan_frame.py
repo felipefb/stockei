@@ -84,6 +84,28 @@ def test_scan_frame_without_date(client, auth):
     assert body["suggested_name"] is not None
 
 
+def test_scan_frame_low_contrast_date_uses_enhanced_pass(client, auth):
+    """Data cinza-claro sobre branco (jato de tinta fraco): só a segunda
+    passada com autocontraste consegue ler."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    future = (date.today() + timedelta(days=90)).strftime("%d/%m/%Y")
+    img = Image.new("RGB", (640, 300), "white")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("arial.ttf", 34)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((30, 120), f"VAL {future}", fill=(205, 205, 205), font=font)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+
+    r = _post(client, auth, buf.getvalue())
+    body = r.json()
+    assert body["expiry"] is not None, "realce deveria recuperar a data"
+    assert body["expiry"]["date"] == (date.today() + timedelta(days=90)).isoformat()
+
+
 def test_scan_frame_requires_auth(client):
     r = client.post("/identify/scan-frame",
                     files={"frame": ("f.jpg", b"x", "image/jpeg")})
