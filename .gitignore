@@ -60,3 +60,5 @@ test_stockei.db
 qa/coverage_report/
 
 ai_usage.json
+
+ml/dataset/scraped/
