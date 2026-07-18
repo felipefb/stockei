@@ -12,115 +12,150 @@
   <meta name="apple-mobile-web-app-title" content="Stockei">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <style>
-    .layout { max-width: 560px; margin: 0 auto; padding: 1.4rem 1.2rem calc(2rem + env(safe-area-inset-bottom)); }
-    header { text-align: center; margin: 0.5rem 0 1.4rem; }
-    .who { color: var(--muted); font-size: 0.82rem; margin-top: 0.3rem; }
-    .grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem;
+    /* ============================================================
+       Home Stockei — "Ação + Pulso da loja"
+       Uma ação dominante (escanear) e o estado vivo do estoque.
+       Sem menu de módulos: navegação secundária é texto, discreta.
+       ============================================================ */
+    .layout {
+      max-width: 480px; margin: 0 auto; min-height: 100vh;
+      display: flex; flex-direction: column;
+      padding: 1.6rem 1.3rem calc(1.6rem + env(safe-area-inset-bottom));
     }
-    .module {
-      position: relative;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 0.6rem; min-height: 128px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      text-decoration: none; color: var(--text);
-      font-family: var(--font-display); font-weight: 700; font-size: 0.92rem;
-      transition: transform 0.12s ease, border-color 0.12s ease;
-      text-align: center; padding: 1rem 0.6rem;
+    header { display: flex; justify-content: space-between; align-items: baseline; }
+    .who { color: var(--faint); font-size: 0.78rem; font-family: var(--font-mono); }
+
+    /* ---- Ação principal: ESCANEAR ---- */
+    .scan-cta {
+      display: block; text-decoration: none; margin: 1.6rem 0 1.2rem;
+      background: var(--lime); color: #10130a;
+      border-radius: 22px; padding: 1.6rem 1.4rem;
+      position: relative; overflow: hidden;
+      transition: transform 0.12s ease;
     }
-    .module:active { transform: scale(0.97); }
-    .module .icon {
-      font-size: 1.7rem; width: 54px; height: 54px;
-      display: grid; place-items: center; border-radius: 14px;
-      background: var(--lime-dim); border: 1px solid rgba(198, 255, 62, 0.3);
-    }
-    .module.soon { opacity: 0.45; pointer-events: none; }
-    .module.soon .icon { background: var(--surface-2); border-color: var(--border); }
-    .module .soon-tag {
-      position: absolute; top: 10px; right: 10px;
-      font-family: var(--font-mono); font-size: 0.55rem; font-weight: 700;
-      letter-spacing: 0.1em; color: var(--faint);
-      border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
-    }
-    .badge-alert {
-      position: absolute; top: 10px; right: 10px;
-      background: var(--danger); color: #fff;
+    .scan-cta:active { transform: scale(0.98); }
+    .scan-cta .label {
       font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700;
-      min-width: 22px; height: 22px; border-radius: 999px;
-      display: grid; place-items: center; padding: 0 6px;
+      letter-spacing: 0.18em; opacity: 0.65;
     }
-    #login-hint { text-align: center; margin-top: 1.4rem; }
+    .scan-cta .title {
+      font-family: var(--font-display); font-weight: 700;
+      font-size: 1.9rem; letter-spacing: -0.03em; margin-top: 0.2rem;
+    }
+    .scan-cta .sub { font-size: 0.85rem; opacity: 0.75; margin-top: 0.3rem; }
+    /* barras de código como textura da própria ação */
+    .scan-cta::after {
+      content: ''; position: absolute; right: -8px; top: 0; bottom: 0; width: 42%;
+      background: repeating-linear-gradient(90deg,
+        rgba(10,11,16,0.85) 0 3px, transparent 3px 9px,
+        rgba(10,11,16,0.85) 9px 14px, transparent 14px 20px,
+        rgba(10,11,16,0.85) 20px 22px, transparent 22px 31px);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%);
+      mask-image: linear-gradient(90deg, transparent, #000 40%);
+      opacity: 0.9;
+    }
+
+    /* ---- Pulso da loja: o estado agora ---- */
+    .pulse { flex: 1; }
+    .pulse .klabel { display: block; margin-bottom: 0.6rem; }
+    .vital {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.95rem 1.1rem; margin-bottom: 0.6rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); text-decoration: none; color: var(--text);
+      transition: border-color 0.12s ease;
+    }
+    .vital:active { border-color: var(--border-hi); }
+    .vital .k { font-size: 0.85rem; color: var(--muted); }
+    .vital .v {
+      font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
+      letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    }
+    .vital.risk    { border-left: 3px solid var(--danger); }
+    .vital.risk .v { color: var(--danger); }
+    .vital.warn    { border-left: 3px solid var(--amber); }
+    .vital.warn .v { color: var(--amber); }
+    .vital.ok      { border-left: 3px solid var(--lime); }
+    .vital.ok .v   { color: var(--lime); }
+    .pulse-empty { color: var(--faint); font-size: 0.85rem; padding: 0.4rem 0.2rem; }
+
+    /* ---- Navegação secundária: texto, não azulejo ---- */
+    .secondary {
+      display: flex; gap: 1.2rem; justify-content: center; flex-wrap: wrap;
+      padding-top: 1.2rem; border-top: 1px dashed var(--border);
+    }
+    .secondary a {
+      color: var(--muted); text-decoration: none; font-size: 0.82rem;
+      font-family: var(--font-mono); letter-spacing: 0.04em;
+    }
+    .secondary a:active { color: var(--lime); }
   </style>
 </head>
 <body>
   <div class="layout">
     <header>
-      <span class="klabel">Inventário por câmera</span><br>
-      <span class="brand" style="font-size:1.7rem">STOCKEI</span>
-      <div class="who" id="who">—</div>
+      <span class="brand">STOCKEI</span>
+      <span class="who" id="who">—</span>
     </header>
 
-    <div class="grid">
-      <a class="module" href="demo_portal.html">
-        <span class="icon">📷</span> Estação de contagem
-      </a>
-      <a class="module" href="dashboard.html" id="mod-dash">
-        <span class="icon">📊</span> Dashboard
-        <span class="badge-alert" id="badge-exp" hidden></span>
-      </a>
-      <a class="module" href="inventory.html">
-        <span class="icon">📦</span> Inventário
-      </a>
-      <a class="module" href="#" onclick="exportCsv();return false">
-        <span class="icon">⬇️</span> Exportar CSV
-      </a>
-      <a class="module soon" href="#"><span class="soon-tag">EM BREVE</span>
-        <span class="icon">🧾</span> Conferência
-      </a>
-      <a class="module soon" href="#"><span class="soon-tag">EM BREVE</span>
-        <span class="icon">📉</span> Perdas
-      </a>
-      <a class="module soon" href="#"><span class="soon-tag">EM BREVE</span>
-        <span class="icon">🔁</span> Transferências
-      </a>
-      <a class="module soon" href="#"><span class="soon-tag">EM BREVE</span>
-        <span class="icon">⚙️</span> Configurações
-      </a>
-    </div>
+    <a class="scan-cta" href="demo_portal.html">
+      <span class="label">// AÇÃO</span>
+      <div class="title">Escanear<br>agora</div>
+      <div class="sub">Código de barras + validade, direto da câmera</div>
+    </a>
 
-    <p class="hint" id="login-hint" hidden>
-      Você não está conectado — os módulos abrem a tela de login.
-    </p>
+    <section class="pulse">
+      <span class="klabel">Pulso da loja</span>
+      <div id="vitals"><div class="pulse-empty" id="pulse-msg">carregando…</div></div>
+    </section>
+
+    <nav class="secondary">
+      <a href="dashboard.html">dashboard</a>
+      <a href="#" onclick="exportCsv();return false">exportar csv</a>
+      <a href="#" onclick="logout();return false" id="lnk-sair" hidden>sair</a>
+    </nav>
   </div>
 
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
-
     const token = sessionStorage.getItem("token");
+    const brl = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
     async function boot() {
+      const vitals = document.getElementById("vitals");
       if (!token) {
-        document.getElementById("login-hint").hidden = false;
-        document.getElementById("who").textContent = "toque em um módulo para entrar";
+        document.getElementById("who").textContent = "";
+        vitals.innerHTML =
+          "<div class='pulse-empty'>Entre pela câmera para ver o estado da loja.</div>";
         return;
       }
       try {
         const h = { Authorization: `Bearer ${token}` };
         const meResp = await fetch("/users/me", { headers: h });
-        if (!meResp.ok) throw new Error("sessão expirada");
+        if (!meResp.ok) throw new Error("expirou");
         const me = await meResp.json();
-        document.getElementById("who").textContent = `Usuário: ${me.name}`;
+        document.getElementById("who").textContent = me.name.toLowerCase();
+        document.getElementById("lnk-sair").hidden = false;
+
         const d = await (await fetch("/dashboard/summary", { headers: h })).json();
-        const pend = (d.expiring || []).length + (d.low_stock || []).length;
-        if (pend > 0) {
-          const b = document.getElementById("badge-exp");
-          b.textContent = pend;
-          b.hidden = false;
+        const rows = [];
+        rows.push(`<a class="vital ok" href="dashboard.html">
+          <span class="k">Valor em estoque</span><span class="v">${brl(d.stock_value)}</span></a>`);
+        if ((d.expiring_value || 0) > 0) {
+          rows.push(`<a class="vital risk" href="dashboard.html">
+            <span class="k">Em risco por validade</span><span class="v">${brl(d.expiring_value)}</span></a>`);
         }
+        if ((d.low_stock || []).length > 0) {
+          rows.push(`<a class="vital warn" href="dashboard.html">
+            <span class="k">Itens para repor</span><span class="v">${d.low_stock.length}</span></a>`);
+        }
+        if (rows.length === 1) {
+          rows.push(`<div class="pulse-empty">Sem alertas — estoque saudável.</div>`);
+        }
+        vitals.innerHTML = rows.join("");
       } catch (e) {
-        document.getElementById("login-hint").hidden = false;
-        document.getElementById("who").textContent = "sessão expirada — entre de novo";
+        vitals.innerHTML =
+          "<div class='pulse-empty'>Sessão expirada — entre de novo pela câmera.</div>";
       }
     }
     boot();
@@ -134,6 +169,11 @@
       a.download = `stockei_inventario_${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
+    }
+
+    function logout() {
+      sessionStorage.removeItem("token");
+      location.reload();
     }
   </script>
 </body>
