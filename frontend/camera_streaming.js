@@ -92,20 +92,33 @@ function stopCamera() {
   setStatus("Câmera desligada", "offline");
 }
 
-/** Extrai frame atual como Blob JPEG 640x640. */
-function captureFrame() {
+/**
+ * Extrai o frame atual como Blob JPEG preservando a proporção do vídeo.
+ * maxSide 640 para o streaming de detecção; use captureFrameHiRes() para OCR.
+ */
+function captureFrame(maxSide = TARGET_SIZE) {
+  const vw = els.video.videoWidth || TARGET_SIZE;
+  const vh = els.video.videoHeight || TARGET_SIZE;
+  const scale = Math.min(1, maxSide / Math.max(vw, vh));
   const canvas = els.canvas;
-  canvas.width = TARGET_SIZE;
-  canvas.height = TARGET_SIZE;
+  canvas.width = Math.round(vw * scale);
+  canvas.height = Math.round(vh * scale);
   const ctx = canvas.getContext("2d");
-  ctx.drawImage(els.video, 0, 0, TARGET_SIZE, TARGET_SIZE);
+  ctx.drawImage(els.video, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
 }
 
-async function sendFrame() {
+/** Frame em alta resolução (proporção preservada) para OCR de nome/validade. */
+function captureFrameHiRes() {
+  return captureFrame(1600);
+}
+
+async function sendFrame(showLoading = true) {
   const blob = await captureFrame();
   if (!blob) return;
-  els.loading.hidden = false;
+  // No streaming contínuo o "Processando…" piscando 3x/s treme o layout —
+  // só aparece na captura manual.
+  if (showLoading) els.loading.hidden = false;
   try {
     const form = new FormData();
     form.append("frame", blob, "frame.jpg");
@@ -116,35 +129,52 @@ async function sendFrame() {
   } catch (err) {
     showError(`Falha ao enviar frame: ${err.message}`);
   } finally {
-    els.loading.hidden = true;
+    if (showLoading) els.loading.hidden = true;
   }
 }
 
 function renderDetections(result) {
-  els.detections.innerHTML = "";
   const items = result.detections || [];
+  // Atualização estável: reaproveita os <li> existentes em vez de recriar a
+  // lista inteira — evita reflow/salto de layout a cada frame.
+  const list = els.detections;
   if (items.length === 0) {
-    els.detections.innerHTML = "<li class='empty'>Nenhum produto detectado</li>";
-    return;
-  }
-  for (const det of items) {
-    const li = document.createElement("li");
-    li.textContent = `${det.class_name} — ${(det.confidence * 100).toFixed(1)}%`;
-    els.detections.appendChild(li);
+    if (!list.querySelector(".empty")) {
+      list.innerHTML = "<li class='empty'>Nenhum produto detectado</li>";
+    }
+  } else {
+    list.querySelector(".empty")?.remove();
+    const lis = list.querySelectorAll("li");
+    items.forEach((det, i) => {
+      const text = `${det.class_name} — ${(det.confidence * 100).toFixed(1)}%`;
+      if (lis[i]) {
+        if (lis[i].textContent !== text) lis[i].textContent = text;
+      } else {
+        const li = document.createElement("li");
+        li.textContent = text;
+        list.appendChild(li);
+      }
+    });
+    for (let i = items.length; i < lis.length; i++) lis[i].remove();
   }
   drawBoxes(items);
 }
 
 function drawBoxes(items) {
   const overlay = els.overlay;
-  overlay.width = els.video.clientWidth;
-  overlay.height = els.video.clientHeight;
+  const w = els.video.clientWidth;
+  const h = els.video.clientHeight;
+  // Redimensionar um canvas o limpa e força repaint — só quando mudar de fato.
+  if (overlay.width !== w || overlay.height !== h) {
+    overlay.width = w;
+    overlay.height = h;
+  }
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
-  ctx.strokeStyle = "#22c55e";
+  ctx.strokeStyle = "#c6ff3e";
   ctx.lineWidth = 2;
-  ctx.font = "12px sans-serif";
-  ctx.fillStyle = "#22c55e";
+  ctx.font = "12px monospace";
+  ctx.fillStyle = "#c6ff3e";
   const sx = overlay.width / TARGET_SIZE;
   const sy = overlay.height / TARGET_SIZE;
   for (const det of items) {
@@ -156,7 +186,7 @@ function drawBoxes(items) {
 
 function toggleStreaming(enabled) {
   if (enabled && mediaStream) {
-    streamTimer = setInterval(sendFrame, 1000 / STREAM_FPS);
+    streamTimer = setInterval(() => sendFrame(false), 1000 / STREAM_FPS);
     setStatus(`Transmitindo (${STREAM_FPS} FPS)`, "streaming");
   } else {
     clearInterval(streamTimer);

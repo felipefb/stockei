@@ -21,6 +21,8 @@
     .tour { background: var(--violet-dim); border: 1px solid rgba(139, 92, 246, 0.45);
             border-radius: 12px; padding: 0.85rem 1rem; font-size: 0.85rem; margin-bottom: 1.1rem; }
     .tour a { color: #c4b5fd; }
+    /* altura estável: a lista de detecções não pode chacoalhar o layout */
+    #detections { min-height: 96px; max-height: 180px; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -187,7 +189,8 @@
       setInterval(async () => {
         if (!video.srcObject || video.readyState < 2) return;
         if (!sessionStorage.getItem("token")) return;
-        const blob = await captureFrame();
+        // alta resolução com proporção preservada — essencial para ler datas pequenas
+        const blob = await captureFrameHiRes();
         if (!blob) return;
         const form = new FormData();
         form.append("frame", blob, "frame.jpg");
@@ -324,7 +327,7 @@
     async function aiIdentify() {
       const btn = document.getElementById("btn-ai");
       const status = document.getElementById("ai-status");
-      const blob = await captureFrame();
+      const blob = await captureFrameHiRes();
       if (!blob) { status.textContent = "Ligue a câmera primeiro."; return; }
       btn.disabled = true;
       status.textContent = "🤖 Analisando embalagem…";
@@ -420,6 +423,6 @@
       }
     }
   </script>
-  <script src="../frontend/camera_streaming.js?v=3"></script>
+  <script src="../frontend/camera_streaming.js?v=4"></script>
 </body>
 </html>
