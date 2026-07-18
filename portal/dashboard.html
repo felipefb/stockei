@@ -53,8 +53,9 @@
       </div>
       <div class="panel">
         <h2>⚠️ Reposição necessária</h2>
-        <table><thead><tr><th>Produto</th><th style="text-align:right">Qtd</th></tr></thead>
-          <tbody id="t-low"><tr><td class="muted" colspan="2">—</td></tr></tbody></table>
+        <table><thead><tr><th>Produto</th><th style="text-align:right">Qtd</th>
+               <th style="text-align:right">Mín.</th></tr></thead>
+          <tbody id="t-low"><tr><td class="muted" colspan="3">—</td></tr></tbody></table>
       </div>
       <div class="panel">
         <h2>📦 Por categoria</h2>
@@ -131,8 +132,10 @@
         : "<tr><td class='muted' colspan='5'>Nenhum item com validade próxima 🎉</td></tr>";
 
       document.getElementById("t-low").innerHTML = d.low_stock.length
-        ? d.low_stock.map(i => `<tr><td>${i.name}</td><td class="num ${i.quantity===0?'warn':''}">${i.quantity}</td></tr>`).join("")
-        : "<tr><td class='muted' colspan='2'>Nenhum item em alerta 🎉</td></tr>";
+        ? d.low_stock.map(i => `<tr><td>${i.name}</td>
+            <td class="num ${i.quantity===0?'warn':''}">${i.quantity}</td>
+            <td class="num muted">${i.min_stock ?? 5}</td></tr>`).join("")
+        : "<tr><td class='muted' colspan='3'>Nenhum item em alerta 🎉</td></tr>";
 
       document.getElementById("t-cat").innerHTML = d.by_category
         .map(c => `<tr><td>${c.category}</td><td class="num">${c.units}</td><td class="num">${c.value.toFixed(2)}</td></tr>`).join("");

@@ -59,8 +59,8 @@ def test_dashboard_with_stock(client, auth):
     assert d["total_products"] == 2
     assert d["total_units"] == 6
     assert d["stock_value"] == 30.0                      # 6 un x R$5
-    assert len(d["low_stock"]) == 1                       # produto 222 com 0 un
-    assert d["low_stock"][0]["sku"] == "222"
+    # minimos por categoria: 111 Laticinios (min 8, qty 6) e 222 Bebidas (min 12, qty 0)
+    assert {i["sku"] for i in d["low_stock"]} == {"111", "222"}
     cats = {c["category"] for c in d["by_category"]}
     assert "Laticínios" in cats
     assert len(d["recent_movements"]) == 6
