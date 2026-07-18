@@ -80,16 +80,17 @@
 
         <div>
           <div class="panel" style="margin-bottom:1rem">
-            <h2 style="font-size:1rem;margin-bottom:0.5rem">Detecções</h2>
-            <div id="loading" class="loading" hidden>Processando…</div>
-            <ul id="detections"><li class="empty">Aguardando frames…</li></ul>
-          </div>
-          <div class="panel" style="margin-bottom:1rem">
             <h2 style="font-size:1rem;margin-bottom:0.5rem">📦 Captura de produto</h2>
             <!-- Checklist da captura automática: EAN + validade do MESMO produto -->
             <div id="capture-checklist" style="margin-bottom:0.6rem">
               <div class="stat"><span>Código de barras</span><b id="ck-ean" class="mono">⏳ aponte o código</b></div>
               <div class="stat"><span>Validade</span><b id="ck-expiry" class="mono">⏳ aguardando código</b></div>
+              <!-- fallback: digitar nunca pode ser mais lento que o OCR -->
+              <div id="expiry-manual" style="display:flex;gap:0.4rem;margin-top:0.4rem" hidden>
+                <input id="m-expiry" class="mono" placeholder="ou digite: 05/26"
+                       inputmode="numeric" style="flex:1">
+                <button class="btn" onclick="manualExpiry()">OK</button>
+              </div>
             </div>
             <div id="scan-idle" class="loading" hidden></div>
             <div id="scan-found" hidden>
@@ -120,6 +121,12 @@
             <div class="stat"><span>Frames enviados</span><b id="s-frames">0</b></div>
             <div class="stat"><span>Objetos detectados</span><b id="s-objects">0</b></div>
             <div class="stat"><span>Latência média</span><b id="s-latency">—</b></div>
+            <!-- log técnico recolhido: não desloca o layout durante a captura -->
+            <details style="margin-top:0.5rem">
+              <summary class="hint" style="cursor:pointer">log de detecções</summary>
+              <div id="loading" class="loading" hidden>Processando…</div>
+              <ul id="detections"><li class="empty">Aguardando frames…</li></ul>
+            </details>
           </div>
           <div class="panel">
             <h2 style="font-size:1rem;margin-bottom:0.5rem">🗃 Estoque (catálogo)</h2>
@@ -196,6 +203,11 @@
       setInterval(async () => {
         if (!video.srcObject || video.readyState < 2) return;
         if (!sessionStorage.getItem("token")) return;
+        // só gasta OCR quando ele tem trabalho: validade pendente de uma
+        // captura, ou cadastro novo precisando de nome
+        const expiryPending = capture.ean && !capture.expirySaved;
+        const namePending = !document.getElementById("scan-new").hidden;
+        if (!expiryPending && !namePending) return;
         // alta resolução com proporção preservada — essencial para ler datas pequenas
         const blob = await captureFrameHiRes();
         if (!blob) return;
@@ -244,7 +256,32 @@
         const el = document.getElementById("p-expiry");
         if (el) el.textContent = `${saved.expiry_date} (${saved.days_left}d)`;
         setCheck("ck-expiry", true, `${saved.expiry_date} — registrada`);
+        document.getElementById("expiry-manual").hidden = true;
       }
+    }
+
+    // Validade digitada: aceita 05/26, 05/2026, 15/08/26 ou 2026-05-31
+    function manualExpiry() {
+      const raw = document.getElementById("m-expiry").value.trim();
+      if (!raw) return;
+      let iso = null;
+      let m;
+      if ((m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/))) iso = raw;
+      else if ((m = raw.match(/^(\d{2})[/\-. ](\d{2})[/\-. ](\d{2,4})$/))) {
+        const y = m[3].length === 2 ? "20" + m[3] : m[3];
+        iso = `${y}-${m[2]}-${m[1]}`;
+      } else if ((m = raw.match(/^(\d{2})[/\-. ](\d{2,4})$/))) {
+        const y = m[2].length === 2 ? "20" + m[2] : m[2];
+        iso = `${y}-${m[1]}-01`;
+      }
+      if (!iso) {
+        setCheck("ck-expiry", false, "formato: 05/26 ou 15/08/26");
+        return;
+      }
+      capture.expiry = { date: iso, expired: false };
+      capture.expirySaved = false;
+      if (capture.known) saveExpiry();
+      else setCheck("ck-expiry", true, iso + " (grava no cadastro)");
     }
 
     // ---------- Scanner de código de barras (BarcodeDetector nativo do Chrome) ----------
@@ -302,6 +339,8 @@
       capture = { ean, known: false, expiry: null, expirySaved: false };
       setCheck("ck-ean", true, ean);
       setCheck("ck-expiry", false, "vire a embalagem até a data aparecer");
+      document.getElementById("expiry-manual").hidden = false;
+      document.getElementById("m-expiry").value = "";
 
       const r = await fetch(`/identify/${ean}`, { headers: authHeaders() });
       const body = await r.json();
@@ -434,6 +473,6 @@
       }
     }
   </script>
-  <script src="../frontend/camera_streaming.js?v=4"></script>
+  <script src="../frontend/camera_streaming.js?v=5"></script>
 </body>
 </html>

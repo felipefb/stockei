@@ -53,6 +53,42 @@ def test_ocr_common_confusions():
     assert r["date"].startswith(str(year))
 
 
+def test_metal_stamp_mm_yy():
+    """Gravação em metal: '12 26' e '12/26' = dezembro/2026, fim do mês."""
+    for raw in ["12 26", "12/26", "VAL 12.26"]:
+        r = extract_date(raw)
+        assert r["valid"] is True, raw
+        assert r["date"] == "2026-12-31", raw
+
+
+def test_metal_stamp_expired_mm_yy_still_extracts_date():
+    """'05 26' já venceu (estamos depois de mai/26): data extraída + flag."""
+    r = extract_date("05 26")
+    assert r["valid"] is False
+    assert r["date"] == "2026-05-31"
+    assert "vencido" in r["error"].lower()
+
+
+def test_metal_stamp_with_lot_number():
+    """Linha real de lata: lote + data — o lote não pode virar data."""
+    r = extract_date("L 407004604 12 26 L31")
+    assert r["valid"] is True
+    assert r["date"] == "2026-12-31"
+
+
+def test_spaced_dd_mm_yy():
+    r = extract_date("15 08 26")
+    assert r["valid"] is True
+    assert r["date"] == "2026-08-15"
+
+
+def test_implausible_short_pairs_are_not_dates():
+    # mês 46 e ano fora da janela não são datas
+    for raw in ["46 04", "13 99", "00 12"]:
+        r = extract_date(raw)
+        assert r["valid"] is False, raw
+
+
 def test_no_date_found():
     r = extract_date("PRODUTO XYZ 500MG")
     assert r["valid"] is False
