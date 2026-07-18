@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stockei — Dashboard</title>
   <link rel="stylesheet" href="../frontend/camera_styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0a0b10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
   <style>
     /* estilos específicos do dashboard — tokens e componentes vêm do design system */
     .layout { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
@@ -22,6 +28,7 @@
         <span class="brand">STOCKEI</span>
       </div>
       <div class="actions">
+        <a class="btn" href="index.html" style="text-decoration:none">☰ Menu</a>
         <select id="store-select" class="btn" style="appearance:auto;padding:0.55rem 0.8rem"
                 onchange="setStore(this.value)"></select>
         <button class="btn" onclick="exportCsv()">⬇ Exportar CSV</button>
