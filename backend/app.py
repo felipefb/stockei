@@ -53,6 +53,11 @@ for _dir in ("portal", "frontend"):
     if _path.is_dir():
         app.mount(f"/{_dir}", StaticFiles(directory=_path, html=True), name=_dir)
 
+# imagens coletadas para curadoria do dataset (ml/image_scraper.py)
+_SCRAPED = _ROOT / "ml" / "dataset" / "scraped"
+_SCRAPED.mkdir(parents=True, exist_ok=True)
+app.mount("/scraped", StaticFiles(directory=_SCRAPED), name="scraped")
+
 # Rate limiting simples em memória (produção: Redis)
 _RATE_LIMIT = 600  # req/min por IP (streaming de camera: 3-5 FPS = 180-300 req/min)
 _RATE_EXEMPT = ("/process-frame", "/ws/")  # fluxo continuo de frames não conta
@@ -700,6 +705,58 @@ def stock_in_by_ean(
     inv.quantity += body.quantity
     db.commit()
     return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
+
+
+# ---------- Curadoria do dataset (double-check humano) ----------
+class CurateIn(schemas.BaseModel):
+    file: str
+    keep: bool
+    true_date: str | None = None  # gabarito ISO YYYY-MM-DD quando houver data
+
+
+@app.get("/dataset/pending")
+def dataset_pending(_: models.User = Depends(get_current_user)):
+    """Imagens coletadas aguardando curadoria."""
+    import json as _json
+
+    manifest_path = _SCRAPED / "manifest.json"
+    if not manifest_path.exists():
+        return {"pending": [], "kept": 0, "discarded": 0}
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    pending = [{"file": k, "query": v.get("query", "")}
+               for k, v in manifest.items() if v.get("status") == "pending"]
+    return {
+        "pending": pending[:200],
+        "kept": sum(v.get("status") == "kept" for v in manifest.values()),
+        "discarded": sum(v.get("status") == "discarded" for v in manifest.values()),
+    }
+
+
+@app.post("/dataset/curate")
+def dataset_curate(
+    body: CurateIn,
+    _: models.User = Depends(get_current_user),
+):
+    """Registra o veredito humano: aprova (com gabarito) ou descarta."""
+    import json as _json
+
+    manifest_path = _SCRAPED / "manifest.json"
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    if body.file not in manifest:
+        raise HTTPException(status_code=404, detail="Imagem não está no manifest")
+    entry = manifest[body.file]
+    entry["status"] = "kept" if body.keep else "discarded"
+    if body.true_date:
+        try:
+            datetime.fromisoformat(body.true_date)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Gabarito inválido (YYYY-MM-DD)")
+        entry["true_date"] = body.true_date
+    manifest_path.write_text(_json.dumps(manifest, indent=1), encoding="utf-8")
+
+    if not body.keep:  # descartada sai do disco
+        (_SCRAPED / body.file).unlink(missing_ok=True)
+    return {"file": body.file, "status": entry["status"]}
 
 
 # ---------- Sessões de Inventário (P16) ----------
