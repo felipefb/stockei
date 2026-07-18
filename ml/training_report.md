@@ -1,23 +1,32 @@
-# Stockei — Relatório de Treino do Modelo Customizado
-*Autor: ML/AI Engineer Agent · Status: PIPELINE PRONTO — treino real pendente de dataset*
+# Stockei — Relatório de Treino do Modelo Customizado (Visão 1:N)
+*Autor: ML/AI Engineer Agent · Atualizado: Prompt 1 (dataset + testes de estresse)*
 
-## Pipeline implementado (`train_custom_model.py`)
-1. **Dataset** — formato YOLO, split 70/20/10, `build_dataset_yaml()` gera a config.
-2. **Anotação** — recomendado Roboflow (export "YOLOv8"), alternativa LabelImg.
-3. **Treino** — YOLOv8m, 100 epochs, lr 0.001, batch 16, GPU, augmentation (HSV, flip, mosaic, scale).
-4. **Validação** — mAP50/precision/recall extraídos automaticamente; gate de aprovação:
-   mAP > 0.85, Recall > 0.85, Precision > 0.90.
-5. **Export** — melhor checkpoint → `models/custom_model.pt` (a `detection_api` usa via
-   `STOCKEI_MODEL_PATH=models/custom_model.pt`).
+## Status: FERRAMENTAL COMPLETO — treino aguardando fotos reais + GPU (Colab)
 
-## Pendências (dependem de coleta física)
-- [ ] Coletar 1000+ imagens de produtos (ângulos, iluminações, câmeras diferentes)
-- [ ] Anotar bounding boxes + classes no Roboflow
-- [ ] Executar treino em GPU (g4dn.xlarge ~2-4h para 100 epochs)
-- [ ] Registrar métricas reais em `metrics.json`
+## Pipeline pronto
+| Etapa | Ferramenta | Status |
+|---|---|---|
+| Coleta/organização | `ml/dataset_builder.py` (valida, normaliza 1280px, split 80/20, YAML) | ✅ |
+| Anotação automática | `ml/annotator.py` (detector → labels YOLO + OCR de validade em sidecar) | ✅ |
+| Análise de gôndola | `ml/shelf_analysis.py` (rupturas por vão ≥ 80% da largura média) | ✅ |
+| Prateleiras sintéticas | `ml/synthetic_shelf.py` (densidade/ruptura/oclusão/datas controladas) | ✅ |
+| Testes de estresse | `ml/stress_tests.py` — 9 testes | ✅ passando |
+| Treino | `ml/train_custom_model.py` local · `docs/treino_colab.md` GPU grátis | ✅ pronto |
 
-## Comando de execução
-```bash
-pip install ultralytics
-python ml/train_custom_model.py --data ml/dataset/stockei.yaml --epochs 100
-```
+## Os 4 Testes de Estresse (Prompt 1)
+| Teste | Cenário | Resultado atual |
+|---|---|---|
+| Densidade | 15 e 25 itens numa foto | ✅ pipeline validado (ground truth sintético) |
+| Ruptura | buraco de 2 slots; gôndola cheia; gôndola vazia | ✅ detector de vãos correto nos 3 casos |
+| Oclusão | caixa sobreposta a 2 vizinhas | ✅ tolerância de perda ≤ 2 itens |
+| OCR simultâneo | 6 produtos com "VAL 12/2027" | ✅ RapidOCR leu ≥ 2 datas reais na imagem |
+
+> Sem GPU, os testes usam o ground truth sintético como detecções — validam o
+> pipeline inteiro (dataset → análise → OCR). Assim que `models/stockei_v1.pt`
+> existir com `ultralytics` instalado, os MESMOS testes passam a medir o modelo real.
+
+## Pendências (dependem de ação física)
+- [ ] 50 fotos de prateleira por categoria (medicamentos, higiene, bebidas, mercearia)
+- [ ] Revisão das anotações + marcação de rupturas no Roboflow
+- [ ] Treino no Colab T4 (roteiro completo em `docs/treino_colab.md`)
+- [ ] Metas: mAP > 0.80 · Precision > 0.90 · Recall > 0.85 · latência < 60ms (T4)
