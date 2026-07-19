@@ -554,19 +554,21 @@ async def scan_frame(
     a sugestão de nome do produto e a data de validade (aceita datas vencidas,
     sinalizadas com expired=true). O código de barras é lido no cliente.
     """
-    from backend.vision_identify import read_package
-    from ml.date_validation import extract_date
-
-    from backend.vision_identify import enhance_for_ocr
+    from backend.vision_identify import enhance_for_ocr, read_package
+    from ml.date_validation import extract_best_expiry
 
     def _find_expiry(texts):
-        for t in texts:
-            result = extract_date(t["text"])
+        # Junta os textos numa linha só para o classificador enxergar o rótulo
+        # (V/VAL) mesmo quando o OCR quebra "VAL 05/26" em blocos separados;
+        # também roda por bloco como reforço.
+        joined = " ".join(t["text"] for t in texts)
+        for candidate in (joined, *[t["text"] for t in texts]):
+            result = extract_best_expiry(candidate)
             if result["date"]:  # data plausível (válida OU vencida)
                 is_expired = result.get("error") == "Produto vencido"
                 if result["valid"] or is_expired:
                     return {"date": result["date"], "expired": is_expired,
-                            "source_text": t["text"]}
+                            "source_text": result["raw"]}
         return None
 
     data = await frame.read()

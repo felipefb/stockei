@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ml.date_validation import extract_date
+from ml.date_validation import extract_best_expiry, extract_date
 from ml.ocr_engine import router
 
 app = FastAPI()
@@ -87,6 +87,33 @@ def test_implausible_short_pairs_are_not_dates():
     for raw in ["46 04", "13 99", "00 12"]:
         r = extract_date(raw)
         assert r["valid"] is False, raw
+
+
+def test_prefers_validity_over_fabrication():
+    """Linha com FAB e VAL — deve escolher a validade, não a fabricação."""
+    r = extract_best_expiry("F 01/04/25 V 01/04/27")
+    assert r["date"] == "2027-04-01"
+    r = extract_best_expiry("FAB 15/08/24 VAL 15/08/26")
+    assert r["date"] == "2026-08-15"
+    r = extract_best_expiry("FABR 10/2025 VENC 10/2027")
+    assert r["date"] == "2027-10-31"
+
+
+def test_two_dates_no_label_picks_latest():
+    """Sem rótulo, a validade é a data mais distante no futuro."""
+    r = extract_best_expiry("01/04/25 01/04/27")
+    assert r["date"] == "2027-04-01"
+
+
+def test_full_date_not_shadowed_by_mm_yy():
+    """15/08/26 não pode virar 08/26 (fim do mês) — dia é preservado."""
+    r = extract_best_expiry("VAL 15/08/26")
+    assert r["date"] == "2026-08-15"
+
+
+def test_single_date_still_works():
+    r = extract_best_expiry("L J35MD002 08/27")
+    assert r["date"] == "2027-08-31"
 
 
 def test_no_date_found():

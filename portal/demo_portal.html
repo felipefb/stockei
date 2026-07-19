@@ -88,7 +88,8 @@
               <!-- fallback: digitar nunca pode ser mais lento que o OCR -->
               <div id="expiry-manual" style="display:flex;gap:0.4rem;margin-top:0.4rem" hidden>
                 <input id="m-expiry" class="mono" placeholder="ou digite: 05/26"
-                       inputmode="numeric" style="flex:1">
+                       inputmode="numeric" maxlength="10"
+                       oninput="formatExpiryInput(this)" style="flex:1">
                 <button class="btn" onclick="manualExpiry()">OK</button>
               </div>
             </div>
@@ -261,6 +262,18 @@
     }
 
     // Validade digitada: aceita 05/26, 05/2026, 15/08/26 ou 2026-05-31
+    // Insere "/" sozinho enquanto o usuário digita só números (o teclado
+    // numérico do iPhone não tem a tecla "/").
+    function formatExpiryInput(el) {
+      const d = el.value.replace(/\D/g, "").slice(0, 8);
+      let out = d;
+      if (d.length > 4) out = `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+      else if (d.length > 2) out = `${d.slice(0, 2)}/${d.slice(2)}`;
+      el.value = out;
+    }
+
+    const lastDayOfMonth = (y, m) => new Date(y, m, 0).getDate();
+
     function manualExpiry() {
       const raw = document.getElementById("m-expiry").value.trim();
       if (!raw) return;
@@ -271,15 +284,18 @@
         const y = m[3].length === 2 ? "20" + m[3] : m[3];
         iso = `${y}-${m[2]}-${m[1]}`;
       } else if ((m = raw.match(/^(\d{2})[/\-. ](\d{2,4})$/))) {
+        // MM/AA sem dia → último dia do mês (regra de validade do varejo)
         const y = m[2].length === 2 ? "20" + m[2] : m[2];
-        iso = `${y}-${m[1]}-01`;
+        const day = String(lastDayOfMonth(+y, +m[1])).padStart(2, "0");
+        iso = `${y}-${m[1]}-${day}`;
       }
-      if (!iso) {
+      if (!iso || isNaN(new Date(iso).getTime())) {
         setCheck("ck-expiry", false, "formato: 05/26 ou 15/08/26");
         return;
       }
       capture.expiry = { date: iso, expired: false };
       capture.expirySaved = false;
+      document.getElementById("m-expiry").value = "";
       if (capture.known) saveExpiry();
       else setCheck("ck-expiry", true, iso + " (grava no cadastro)");
     }
@@ -473,6 +489,6 @@
       }
     }
   </script>
-  <script src="../frontend/camera_streaming.js?v=5"></script>
+  <script src="../frontend/camera_streaming.js?v=6"></script>
 </body>
 </html>
