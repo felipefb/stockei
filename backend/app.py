@@ -53,6 +53,11 @@ for _dir in ("portal", "frontend"):
     if _path.is_dir():
         app.mount(f"/{_dir}", StaticFiles(directory=_path, html=True), name=_dir)
 
+# imagens coletadas para curadoria do dataset (ml/image_scraper.py)
+_SCRAPED = _ROOT / "ml" / "dataset" / "scraped"
+_SCRAPED.mkdir(parents=True, exist_ok=True)
+app.mount("/scraped", StaticFiles(directory=_SCRAPED), name="scraped")
+
 # Rate limiting simples em memória (produção: Redis)
 _RATE_LIMIT = 600  # req/min por IP (streaming de camera: 3-5 FPS = 180-300 req/min)
 _RATE_EXEMPT = ("/process-frame", "/ws/")  # fluxo continuo de frames não conta
@@ -462,10 +467,20 @@ def identify(
     }
 
 
+# Estoque mínimo padrão por categoria (giro típico do varejo de bairro)
+MIN_STOCK_BY_CATEGORY = {
+    "Bebidas": 12, "Laticínios": 8, "Mercearia": 10,
+    "Higiene": 6, "Limpeza": 6, "Medicamentos": 10, "Acessórios": 3,
+}
+DEFAULT_MIN_STOCK = 5
+
+
 class RegisterByEan(schemas.BaseModel):
     name: str
     source: str = "manual"  # manual | gtin | ocr
     store_id: int | None = None  # loja destino; None = loja demo
+    price: float = 0.0
+    min_stock: int | None = None  # None = padrão inteligente por categoria
 
 
 @app.post("/identify/{ean}/register", status_code=201)
@@ -496,10 +511,13 @@ def register_by_ean(
         size_unit=norm["size_unit"] or "",
         name_raw=norm["name_raw"],
         source=body.source,
+        price=body.price or 0.0,
     )
     db.add(product)
     db.flush()
-    db.add(models.Inventory(product_id=product.id, quantity=0))
+    min_stock = body.min_stock if body.min_stock is not None else \
+        MIN_STOCK_BY_CATEGORY.get(norm["category"] or "", DEFAULT_MIN_STOCK)
+    db.add(models.Inventory(product_id=product.id, quantity=0, min_stock=min_stock))
     db.commit()
     db.refresh(product)
     return {"found": True, "ean": ean,
@@ -536,19 +554,21 @@ async def scan_frame(
     a sugestão de nome do produto e a data de validade (aceita datas vencidas,
     sinalizadas com expired=true). O código de barras é lido no cliente.
     """
-    from backend.vision_identify import read_package
-    from ml.date_validation import extract_date
-
-    from backend.vision_identify import enhance_for_ocr
+    from backend.vision_identify import enhance_for_ocr, read_package
+    from ml.date_validation import extract_best_expiry
 
     def _find_expiry(texts):
-        for t in texts:
-            result = extract_date(t["text"])
+        # Junta os textos numa linha só para o classificador enxergar o rótulo
+        # (V/VAL) mesmo quando o OCR quebra "VAL 05/26" em blocos separados;
+        # também roda por bloco como reforço.
+        joined = " ".join(t["text"] for t in texts)
+        for candidate in (joined, *[t["text"] for t in texts]):
+            result = extract_best_expiry(candidate)
             if result["date"]:  # data plausível (válida OU vencida)
                 is_expired = result.get("error") == "Produto vencido"
                 if result["valid"] or is_expired:
                     return {"date": result["date"], "expired": is_expired,
-                            "source_text": t["text"]}
+                            "source_text": result["raw"]}
         return None
 
     data = await frame.read()
@@ -687,6 +707,58 @@ def stock_in_by_ean(
     inv.quantity += body.quantity
     db.commit()
     return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
+
+
+# ---------- Curadoria do dataset (double-check humano) ----------
+class CurateIn(schemas.BaseModel):
+    file: str
+    keep: bool
+    true_date: str | None = None  # gabarito ISO YYYY-MM-DD quando houver data
+
+
+@app.get("/dataset/pending")
+def dataset_pending(_: models.User = Depends(get_current_user)):
+    """Imagens coletadas aguardando curadoria."""
+    import json as _json
+
+    manifest_path = _SCRAPED / "manifest.json"
+    if not manifest_path.exists():
+        return {"pending": [], "kept": 0, "discarded": 0}
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    pending = [{"file": k, "query": v.get("query", "")}
+               for k, v in manifest.items() if v.get("status") == "pending"]
+    return {
+        "pending": pending[:200],
+        "kept": sum(v.get("status") == "kept" for v in manifest.values()),
+        "discarded": sum(v.get("status") == "discarded" for v in manifest.values()),
+    }
+
+
+@app.post("/dataset/curate")
+def dataset_curate(
+    body: CurateIn,
+    _: models.User = Depends(get_current_user),
+):
+    """Registra o veredito humano: aprova (com gabarito) ou descarta."""
+    import json as _json
+
+    manifest_path = _SCRAPED / "manifest.json"
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    if body.file not in manifest:
+        raise HTTPException(status_code=404, detail="Imagem não está no manifest")
+    entry = manifest[body.file]
+    entry["status"] = "kept" if body.keep else "discarded"
+    if body.true_date:
+        try:
+            datetime.fromisoformat(body.true_date)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Gabarito inválido (YYYY-MM-DD)")
+        entry["true_date"] = body.true_date
+    manifest_path.write_text(_json.dumps(manifest, indent=1), encoding="utf-8")
+
+    if not body.keep:  # descartada sai do disco
+        (_SCRAPED / body.file).unlink(missing_ok=True)
+    return {"file": body.file, "status": entry["status"]}
 
 
 # ---------- Sessões de Inventário (P16) ----------
@@ -952,7 +1024,7 @@ def export_inventory_csv(
     writer = csv.writer(buffer, delimiter=";")
     writer.writerow([
         "loja", "ean", "produto", "marca", "categoria", "tamanho", "unidade",
-        "preco", "quantidade", "valor_total", "ultima_contagem_em",
+        "preco", "quantidade", "estoque_minimo", "valor_total", "ultima_contagem_em",
     ])
     for product, inv, store in query.all():
         qty = inv.quantity if inv else 0
@@ -962,6 +1034,7 @@ def export_inventory_csv(
             product.size_unit,
             f"{product.price:.2f}".replace(".", ","),
             qty,
+            inv.min_stock if inv else 5,
             f"{qty * (product.price or 0):.2f}".replace(".", ","),
             inv.last_counted_at.isoformat() if inv and inv.last_counted_at else "",
         ])
@@ -1002,8 +1075,11 @@ def dashboard_summary(
         qty = inv.quantity if inv else 0
         total_units += qty
         stock_value += qty * (product.price or 0)
-        if qty < LOW_STOCK_THRESHOLD:
-            low_stock.append({"name": product.name, "quantity": qty, "sku": product.sku})
+        # alerta respeita o estoque mínimo definido POR PRODUTO
+        min_stock = inv.min_stock if inv else LOW_STOCK_THRESHOLD
+        if qty < min_stock:
+            low_stock.append({"name": product.name, "quantity": qty,
+                              "min_stock": min_stock, "sku": product.sku})
         cat = product.category or "Sem categoria"
         agg = by_category.setdefault(cat, {"category": cat, "units": 0, "value": 0.0})
         agg["units"] += qty

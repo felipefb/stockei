@@ -132,6 +132,7 @@ class InventoryOut(ORMModel):
     last_count: int
     last_counted_at: datetime | None
     expiry_date: datetime | None = None
+    min_stock: int = 5
 
 
 class CountRequest(BaseModel):

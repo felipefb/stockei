@@ -109,6 +109,7 @@ class Inventory(Base):
     last_count: Mapped[int] = mapped_column(Integer, default=0)
     last_counted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expiry_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    min_stock: Mapped[int] = mapped_column(Integer, default=5)  # alerta de reposição por produto
 
     product: Mapped[Product] = relationship(back_populates="inventory")
 

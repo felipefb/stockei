@@ -108,9 +108,10 @@ function captureFrame(maxSide = TARGET_SIZE) {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
 }
 
-/** Frame em alta resolução (proporção preservada) para OCR de nome/validade. */
+/** Frame em alta resolução (proporção preservada) para OCR de nome/validade.
+    1280px equilibra legibilidade de datas pequenas e velocidade de upload no 4G/5G. */
 function captureFrameHiRes() {
-  return captureFrame(1600);
+  return captureFrame(1280);
 }
 
 async function sendFrame(showLoading = true) {

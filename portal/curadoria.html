@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stockei — Curadoria do Dataset</title>
+  <link rel="stylesheet" href="../frontend/camera_styles.css">
+  <style>
+    .layout { max-width: 560px; margin: 0 auto; padding: 1.4rem 1.2rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+    .counts { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+    .card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); overflow: hidden; }
+    .card img { width: 100%; max-height: 46vh; object-fit: contain; background: #000; display: block; }
+    .meta { padding: 0.7rem 1rem; font-family: var(--font-mono); font-size: 0.72rem;
+            color: var(--faint); border-top: 1px dashed var(--border); }
+    .controls2 { display: flex; gap: 0.6rem; margin-top: 0.9rem; }
+    .controls2 .btn { flex: 1; padding: 0.9rem; }
+    .gab { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
+    .done { text-align: center; color: var(--muted); padding: 3rem 0; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="topbar">
+      <div><span class="klabel">Curadoria do dataset</span><br><span class="brand">STOCKEI</span></div>
+      <span class="counts" id="counts">—</span>
+    </div>
+
+    <div id="review" hidden>
+      <div class="card">
+        <img id="img" alt="imagem para curadoria">
+        <div class="meta" id="meta">—</div>
+      </div>
+      <div class="gab">
+        <input id="true-date" class="mono" placeholder="Data visível? 10/26 ou 03/10/2026 (opcional)">
+      </div>
+      <div class="controls2">
+        <button class="btn danger" onclick="verdict(false)">✕ Descartar</button>
+        <button class="btn primary" onclick="verdict(true)">✓ Manter</button>
+      </div>
+      <p class="hint">Mantenha apenas fotos onde a data/código está visível como na vida real.
+         Se conseguir ler a data, anote — vira o gabarito do treino. Atalhos: ← descarta · → mantém.</p>
+    </div>
+
+    <div class="done" id="done" hidden>
+      <p>🎉 Curadoria em dia — nada pendente.</p>
+      <p class="hint">Rode <span class="mono">python ml/image_scraper.py</span> para coletar mais.</p>
+    </div>
+  </div>
+
+  <script>
+    const token = sessionStorage.getItem("token");
+    if (!token) location.href = "demo_portal.html";
+    const H = { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+    let queue = [];
+    let current = null;
+
+    // Fila local: todo veredito é salvo NO APARELHO antes de ir ao servidor.
+    // Se a rede/sessão falhar, fica pendente e sincroniza na próxima carga.
+    const PENDING_KEY = "stockei_curation_pending";
+    const localPending = () => JSON.parse(localStorage.getItem(PENDING_KEY) || "[]");
+    const setLocalPending = (arr) => localStorage.setItem(PENDING_KEY, JSON.stringify(arr));
+
+    async function syncPending() {
+      const items = localPending();
+      if (!items.length) return 0;
+      const remaining = [];
+      for (const item of items) {
+        try {
+          const r = await fetch("/dataset/curate", { method: "POST", headers: H,
+                                                     body: JSON.stringify(item) });
+          if (!r.ok && r.status !== 404) remaining.push(item); // 404 = já resolvida
+        } catch (e) { remaining.push(item); }
+      }
+      setLocalPending(remaining);
+      return items.length - remaining.length;
+    }
+
+    function toIso(raw) {
+      if (!raw) return null;
+      let m;
+      if ((m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/))) return raw;
+      if ((m = raw.match(/^(\d{2})[/\-. ](\d{2})[/\-. ](\d{2,4})$/))) {
+        const y = m[3].length === 2 ? "20" + m[3] : m[3];
+        return `${y}-${m[2]}-${m[1]}`;
+      }
+      if ((m = raw.match(/^(\d{2})[/\-. ](\d{2,4})$/))) {
+        const y = m[2].length === 2 ? "20" + m[2] : m[2];
+        return `${y}-${m[1]}-28`;
+      }
+      return null;
+    }
+
+    async function load() {
+      // valida a sessão ANTES de deixar trabalhar — token morto = login já
+      const me = await fetch("/users/me", { headers: H });
+      if (!me.ok) {
+        alert("Sessão expirada — faça login e volte. Nenhum trabalho será perdido.");
+        location.href = "demo_portal.html";
+        return;
+      }
+      const synced = await syncPending();  // recupera vereditos presos de antes
+      const r = await fetch("/dataset/pending", { headers: H });
+      const d = await r.json();
+      queue = d.pending;
+      document.getElementById("counts").textContent =
+        `${queue.length} pendentes · ${d.kept} mantidas · ${d.discarded} fora` +
+        (synced ? ` · ${synced} recuperadas` : "");
+      next();
+    }
+
+    function next() {
+      current = queue.shift() || null;
+      document.getElementById("review").hidden = !current;
+      document.getElementById("done").hidden = !!current;
+      if (!current) return;
+      document.getElementById("img").src = `/scraped/${current.file}`;
+      document.getElementById("meta").textContent = `busca: ${current.query}`;
+      document.getElementById("true-date").value = "";
+    }
+
+    async function verdict(keep) {
+      if (!current) return;
+      const raw = document.getElementById("true-date").value.trim();
+      const iso = toIso(raw);
+      if (keep && raw && !iso) {
+        document.getElementById("true-date").focus();
+        return; // formato inválido — não avança
+      }
+      // 1) grava no aparelho; 2) tenta o servidor; 3) se falhar, fica na fila
+      const verdictBody = { file: current.file, keep, true_date: keep ? iso : null };
+      setLocalPending([...localPending(), verdictBody]);
+      try {
+        const r = await fetch("/dataset/curate", {
+          method: "POST", headers: H, body: JSON.stringify(verdictBody) });
+        if (r.status === 401) {
+          alert("Sessão expirou — este veredito ficou salvo no aparelho e será " +
+                "enviado quando você entrar de novo.");
+          location.href = "demo_portal.html";
+          return;
+        }
+        if (r.ok) setLocalPending(localPending().filter(p => p.file !== verdictBody.file));
+      } catch (e) { /* offline: fica na fila local, sincroniza depois */ }
+      const c = document.getElementById("counts");
+      c.textContent = c.textContent.replace(/^\d+/, m => m - 1);
+      next();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT") return;
+      if (e.key === "ArrowLeft") verdict(false);
+      if (e.key === "ArrowRight") verdict(true);
+    });
+
+    load();
+  </script>
+</body>
+</html>

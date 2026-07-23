@@ -80,16 +80,18 @@
 
         <div>
           <div class="panel" style="margin-bottom:1rem">
-            <h2 style="font-size:1rem;margin-bottom:0.5rem">Detecções</h2>
-            <div id="loading" class="loading" hidden>Processando…</div>
-            <ul id="detections"><li class="empty">Aguardando frames…</li></ul>
-          </div>
-          <div class="panel" style="margin-bottom:1rem">
             <h2 style="font-size:1rem;margin-bottom:0.5rem">📦 Captura de produto</h2>
             <!-- Checklist da captura automática: EAN + validade do MESMO produto -->
             <div id="capture-checklist" style="margin-bottom:0.6rem">
               <div class="stat"><span>Código de barras</span><b id="ck-ean" class="mono">⏳ aponte o código</b></div>
               <div class="stat"><span>Validade</span><b id="ck-expiry" class="mono">⏳ aguardando código</b></div>
+              <!-- fallback: digitar nunca pode ser mais lento que o OCR -->
+              <div id="expiry-manual" style="display:flex;gap:0.4rem;margin-top:0.4rem" hidden>
+                <input id="m-expiry" class="mono" placeholder="ou digite: 05/26"
+                       inputmode="numeric" maxlength="10"
+                       oninput="formatExpiryInput(this)" style="flex:1">
+                <button class="btn" onclick="manualExpiry()">OK</button>
+              </div>
             </div>
             <div id="scan-idle" class="loading" hidden></div>
             <div id="scan-found" hidden>
@@ -103,6 +105,13 @@
             <div id="scan-new" hidden>
               <input id="n-name" placeholder="Nome do produto (ex.: Vigor Grego Tradicional 90g)"
                      style="width:100%;padding:0.5rem;margin:0.5rem 0;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0">
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+                <input id="n-price" type="number" step="0.01" min="0" inputmode="decimal"
+                       placeholder="Preço R$ (opcional)" class="mono" style="flex:1">
+                <input id="n-min" type="number" min="0" inputmode="numeric"
+                       placeholder="Mín. auto" class="mono" style="width:104px"
+                       title="Estoque mínimo — vazio usa o padrão da categoria">
+              </div>
               <button class="btn primary" style="width:100%" onclick="registerProduct()">Cadastrar produto</button>
               <button class="btn" style="width:100%;margin-top:0.4rem" id="btn-ai" onclick="aiIdentify()">🤖 Identificar com IA</button>
               <p id="ai-status" class="hint"></p>
@@ -113,6 +122,12 @@
             <div class="stat"><span>Frames enviados</span><b id="s-frames">0</b></div>
             <div class="stat"><span>Objetos detectados</span><b id="s-objects">0</b></div>
             <div class="stat"><span>Latência média</span><b id="s-latency">—</b></div>
+            <!-- log técnico recolhido: não desloca o layout durante a captura -->
+            <details style="margin-top:0.5rem">
+              <summary class="hint" style="cursor:pointer">log de detecções</summary>
+              <div id="loading" class="loading" hidden>Processando…</div>
+              <ul id="detections"><li class="empty">Aguardando frames…</li></ul>
+            </details>
           </div>
           <div class="panel">
             <h2 style="font-size:1rem;margin-bottom:0.5rem">🗃 Estoque (catálogo)</h2>
@@ -189,6 +204,11 @@
       setInterval(async () => {
         if (!video.srcObject || video.readyState < 2) return;
         if (!sessionStorage.getItem("token")) return;
+        // só gasta OCR quando ele tem trabalho: validade pendente de uma
+        // captura, ou cadastro novo precisando de nome
+        const expiryPending = capture.ean && !capture.expirySaved;
+        const namePending = !document.getElementById("scan-new").hidden;
+        if (!expiryPending && !namePending) return;
         // alta resolução com proporção preservada — essencial para ler datas pequenas
         const blob = await captureFrameHiRes();
         if (!blob) return;
@@ -237,7 +257,47 @@
         const el = document.getElementById("p-expiry");
         if (el) el.textContent = `${saved.expiry_date} (${saved.days_left}d)`;
         setCheck("ck-expiry", true, `${saved.expiry_date} — registrada`);
+        document.getElementById("expiry-manual").hidden = true;
       }
+    }
+
+    // Validade digitada: aceita 05/26, 05/2026, 15/08/26 ou 2026-05-31
+    // Insere "/" sozinho enquanto o usuário digita só números (o teclado
+    // numérico do iPhone não tem a tecla "/").
+    function formatExpiryInput(el) {
+      const d = el.value.replace(/\D/g, "").slice(0, 8);
+      let out = d;
+      if (d.length > 4) out = `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+      else if (d.length > 2) out = `${d.slice(0, 2)}/${d.slice(2)}`;
+      el.value = out;
+    }
+
+    const lastDayOfMonth = (y, m) => new Date(y, m, 0).getDate();
+
+    function manualExpiry() {
+      const raw = document.getElementById("m-expiry").value.trim();
+      if (!raw) return;
+      let iso = null;
+      let m;
+      if ((m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/))) iso = raw;
+      else if ((m = raw.match(/^(\d{2})[/\-. ](\d{2})[/\-. ](\d{2,4})$/))) {
+        const y = m[3].length === 2 ? "20" + m[3] : m[3];
+        iso = `${y}-${m[2]}-${m[1]}`;
+      } else if ((m = raw.match(/^(\d{2})[/\-. ](\d{2,4})$/))) {
+        // MM/AA sem dia → último dia do mês (regra de validade do varejo)
+        const y = m[2].length === 2 ? "20" + m[2] : m[2];
+        const day = String(lastDayOfMonth(+y, +m[1])).padStart(2, "0");
+        iso = `${y}-${m[1]}-${day}`;
+      }
+      if (!iso || isNaN(new Date(iso).getTime())) {
+        setCheck("ck-expiry", false, "formato: 05/26 ou 15/08/26");
+        return;
+      }
+      capture.expiry = { date: iso, expired: false };
+      capture.expirySaved = false;
+      document.getElementById("m-expiry").value = "";
+      if (capture.known) saveExpiry();
+      else setCheck("ck-expiry", true, iso + " (grava no cadastro)");
     }
 
     // ---------- Scanner de código de barras (BarcodeDetector nativo do Chrome) ----------
@@ -295,6 +355,8 @@
       capture = { ean, known: false, expiry: null, expirySaved: false };
       setCheck("ck-ean", true, ean);
       setCheck("ck-expiry", false, "vire a embalagem até a data aparecer");
+      document.getElementById("expiry-manual").hidden = false;
+      document.getElementById("m-expiry").value = "";
 
       const r = await fetch(`/identify/${ean}`, { headers: authHeaders() });
       const body = await r.json();
@@ -359,9 +421,13 @@
       const name = document.getElementById("n-name").value.trim();
       if (!name) return;
       nameAutoFilled = false;
+      const price = parseFloat(document.getElementById("n-price").value) || 0;
+      const minRaw = document.getElementById("n-min").value.trim();
+      const payload = { name, source: nameSource, store_id: activeStore(), price };
+      if (minRaw !== "") payload.min_stock = parseInt(minRaw, 10);
       const r = await fetch(`/identify/${currentEan}/register`, {
         method: "POST", headers: authHeaders(),
-        body: JSON.stringify({ name, source: nameSource, store_id: activeStore() }),
+        body: JSON.stringify(payload),
       });
       if (r.ok) {
         capture.known = true;
@@ -423,6 +489,6 @@
       }
     }
   </script>
-  <script src="../frontend/camera_streaming.js?v=4"></script>
+  <script src="../frontend/camera_streaming.js?v=6"></script>
 </body>
 </html>
