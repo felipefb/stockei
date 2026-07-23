@@ -3,7 +3,11 @@
 import io
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+
+# o servidor calcula days_left com utcnow(); à noite (UTC-3) o
+# _TODAY local fica um dia atrás e o teste quebrava
+_TODAY = datetime.utcnow().date()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_stockei.db")
@@ -55,7 +59,7 @@ def _label_with_date(text):
 
 
 def test_set_expiry(client, auth):
-    future = (date.today() + timedelta(days=20)).isoformat()
+    future = (_TODAY + timedelta(days=20)).isoformat()
     r = client.post(f"/identify/{EAN}/expiry", json={"expiry_date": future}, headers=auth)
     assert r.status_code == 200
     assert r.json()["days_left"] == 20
@@ -81,14 +85,14 @@ def test_dashboard_shows_expiring(client, auth):
 
 
 def test_dashboard_ignores_far_expiry(client, auth):
-    far = (date.today() + timedelta(days=200)).isoformat()
+    far = (_TODAY + timedelta(days=200)).isoformat()
     client.post(f"/identify/{EAN}/expiry", json={"expiry_date": far}, headers=auth)
     d = client.get("/dashboard/summary", headers=auth).json()
     assert d["expiring"] == []
 
 
 def test_expiry_from_image(client, auth):
-    future = (date.today() + timedelta(days=300)).strftime("%d/%m/%Y")
+    future = (_TODAY + timedelta(days=300)).strftime("%d/%m/%Y")
     r = client.post(
         "/identify/expiry-from-image",
         files={"frame": ("f.jpg", _label_with_date(f"VAL {future}"), "image/jpeg")},

@@ -88,8 +88,9 @@ class AILimitReached(Exception):
     pass
 
 
-def identify_package(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
-    """Identifica o produto na foto. Levanta AILimitReached se o teto diário acabou."""
+def _call_vision(image_bytes: bytes, media_type: str, system: str,
+                 schema: dict, question: str) -> dict:
+    """Chamada multimodal com structured output, respeitando o teto diário."""
     usage = _load_usage()
     if usage["calls"] >= DAILY_LIMIT:
         raise AILimitReached(f"Teto diário de {DAILY_LIMIT} identificações por IA atingido")
@@ -100,8 +101,8 @@ def identify_package(image_bytes: bytes, media_type: str = "image/jpeg") -> dict
     response = client.messages.create(
         model=MODEL,
         max_tokens=300,
-        system=_PROMPT,
-        output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
+        system=system,
+        output_config={"format": {"type": "json_schema", "schema": schema}},
         messages=[{
             "role": "user",
             "content": [
@@ -113,7 +114,7 @@ def identify_package(image_bytes: bytes, media_type: str = "image/jpeg") -> dict
                         "data": base64.standard_b64encode(image_bytes).decode(),
                     },
                 },
-                {"type": "text", "text": "Identifique este produto."},
+                {"type": "text", "text": question},
             ],
         }],
     )
@@ -124,12 +125,47 @@ def identify_package(image_bytes: bytes, media_type: str = "image/jpeg") -> dict
     _save_usage(usage)
 
     text = next(b.text for b in response.content if b.type == "text")
-    result = json.loads(text)
+    return json.loads(text)
+
+
+def identify_package(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
+    """Identifica o produto na foto. Levanta AILimitReached se o teto diário acabou."""
+    result = _call_vision(image_bytes, media_type, _PROMPT, _SCHEMA,
+                          "Identifique este produto.")
 
     parts = [result.get("brand"), result.get("product_name"),
              result.get("variant"), result.get("size")]
     result["suggested_name"] = " ".join(p for p in parts if p)
-    logger.info("IA identificou: %r (confiança %s, %d+%d tokens)",
-                result["suggested_name"], result["confidence"],
-                response.usage.input_tokens, response.usage.output_tokens)
+    logger.info("IA identificou: %r (confiança %s)",
+                result["suggested_name"], result["confidence"])
+    return result
+
+
+_EXPIRY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "expiry_date": {"type": ["string", "null"]},  # ISO YYYY-MM-DD ou null
+        "raw_text": {"type": ["string", "null"]},     # como está impresso
+        "confidence": {"type": "string", "enum": ["alta", "media", "baixa"]},
+    },
+    "required": ["expiry_date", "raw_text", "confidence"],
+    "additionalProperties": False,
+}
+
+_EXPIRY_PROMPT = (
+    "Você lê datas de VALIDADE em embalagens brasileiras: jato de tinta, "
+    "relevo em metal (latas), carimbo. Formatos comuns: DD/MM/AAAA, DD/MM/AA, "
+    "MM/AA, 'DD MM AA' com espaços. Rótulos V/VAL/VENC/EXP indicam validade; "
+    "F/FAB é fabricação e deve ser IGNORADA. Sem rótulos, a validade é a data "
+    "mais distante no futuro. Para MM/AA use o último dia do mês. "
+    "Responda expiry_date em ISO (YYYY-MM-DD) ou null se ilegível."
+)
+
+
+def read_expiry(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
+    """Lê a data de validade na foto (fallback quando o OCR local falha)."""
+    result = _call_vision(image_bytes, media_type, _EXPIRY_PROMPT, _EXPIRY_SCHEMA,
+                          "Qual é a data de validade deste produto?")
+    logger.info("IA leu validade: %s (%r, confiança %s)",
+                result["expiry_date"], result["raw_text"], result["confidence"])
     return result

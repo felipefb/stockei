@@ -88,6 +88,7 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(255), index=True)
     category: Mapped[str] = mapped_column(String(100), default="")
     price: Mapped[float] = mapped_column(Float, default=0.0)
+    cost_price: Mapped[float] = mapped_column(Float, default=0.0)  # custo da NF-e
     # Campos normalizados (preenchidos pelo backend/normalizer.py)
     brand: Mapped[str] = mapped_column(String(100), default="")
     size_value: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -121,7 +122,10 @@ class Movement(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     quantity: Mapped[int] = mapped_column(Integer)
-    type: Mapped[str] = mapped_column(String(20))  # in | out | adjustment
+    type: Mapped[str] = mapped_column(String(20))  # in | out | adjustment | loss
+    reason: Mapped[str] = mapped_column(String(30), default="")  # loss: vencimento|avaria|furto|erro_cadastro|consumo_interno
+    note: Mapped[str] = mapped_column(String(255), default="")
+    unit_value: Mapped[float] = mapped_column(Float, default=0.0)  # valorização no momento do evento
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
@@ -157,6 +161,43 @@ class InventoryCount(Base):
     counted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     session: Mapped[InventorySession] = relationship(back_populates="counts")
+
+
+class ReceivingSession(Base):
+    """Conferência de recebimento: NF-e importada → checklist → fechar (entra estoque)."""
+
+    __tablename__ = "receiving_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    nfe_key: Mapped[str] = mapped_column(String(60), default="", index=True)
+    supplier: Mapped[str] = mapped_column(String(255), default="")
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open|closed|discarded
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    items: Mapped[list["ReceivingItem"]] = relationship(back_populates="session")
+
+
+class ReceivingItem(Base):
+    """Item da NF-e dentro de uma conferência (esperado vs conferido)."""
+
+    __tablename__ = "receiving_items"
+    __table_args__ = (Index("ix_recv_session_ean", "session_id", "ean"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("receiving_sessions.id"), index=True)
+    ean: Mapped[str] = mapped_column(String(64), default="")
+    description: Mapped[str] = mapped_column(String(500), default="")
+    expected_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    checked_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    # pendente | conferido | divergente | excedente (excedente = não estava na nota)
+    item_status: Mapped[str] = mapped_column(String(20), default="pendente")
+
+    session: Mapped[ReceivingSession] = relationship(back_populates="items")
 
 
 class Person(Base):

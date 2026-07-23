@@ -116,6 +116,7 @@ class ProductOut(ORMModel):
     name: str
     category: str
     price: float
+    cost_price: float = 0.0
     brand: str = ""
     size_value: float | None = None
     size_unit: str = ""

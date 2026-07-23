@@ -547,15 +547,35 @@ async def suggest_from_image(
 @app.post("/identify/scan-frame")
 async def scan_frame(
     frame: UploadFile = File(...),
+    mode: str | None = None,
     _: models.User = Depends(get_current_user),
 ):
     """
     Escaneamento unificado: UMA passada de OCR no frame extrai ao mesmo tempo
     a sugestão de nome do produto e a data de validade (aceita datas vencidas,
-    sinalizadas com expired=true). O código de barras é lido no cliente.
+    sinalizadas com expired=true). O código de barras é lido no cliente; o
+    zxing-cpp do servidor cobre os que o navegador não decodifica.
+    mode=barcode: só decodifica o código (sem OCR — barato para o loop ocioso).
     """
     from backend.vision_identify import enhance_for_ocr, read_package
     from ml.date_validation import extract_best_expiry
+
+    def _decode_barcode(image_bytes):
+        """Fallback de servidor: zxing-cpp decodifica quando o navegador falha."""
+        try:
+            import io as _io
+
+            import zxingcpp
+            from PIL import Image
+
+            img = Image.open(_io.BytesIO(image_bytes)).convert("RGB")
+            for r in zxingcpp.read_barcodes(img):
+                text = r.text.strip()
+                if text and len(text) >= 8 and text.isdigit():
+                    return text
+        except Exception as exc:
+            logger.debug("zxing indisponível: %s", exc)
+        return None
 
     def _find_expiry(texts):
         # Junta os textos numa linha só para o classificador enxergar o rótulo
@@ -572,6 +592,16 @@ async def scan_frame(
         return None
 
     data = await frame.read()
+
+    if mode == "barcode":  # loop ocioso procurando código: pula o OCR
+        ean = _decode_barcode(data)
+        if ean is None:
+            try:
+                ean = _decode_barcode(enhance_for_ocr(data))
+            except Exception:
+                pass
+        return {"suggested_name": None, "expiry": None, "ean": ean}
+
     try:
         package = read_package(data)
     except Exception as exc:
@@ -579,16 +609,20 @@ async def scan_frame(
         return {"suggested_name": None, "expiry": None, "error": str(exc)}
 
     expiry = _find_expiry(package["texts"])
+    ean = _decode_barcode(data)
 
     # datas de jato de tinta/baixo contraste: segunda passada com realce
-    if expiry is None:
+    if expiry is None or ean is None:
         try:
-            enhanced = read_package(enhance_for_ocr(data))
-            expiry = _find_expiry(enhanced["texts"])
+            enhanced_bytes = enhance_for_ocr(data)
+            if expiry is None:
+                expiry = _find_expiry(read_package(enhanced_bytes)["texts"])
+            if ean is None:
+                ean = _decode_barcode(enhanced_bytes)
         except Exception as exc:
             logger.debug("passada com realce falhou: %s", exc)
 
-    return {"suggested_name": package["suggested_name"], "expiry": expiry}
+    return {"suggested_name": package["suggested_name"], "expiry": expiry, "ean": ean}
 
 
 @app.post("/identify/expiry-from-image")
@@ -671,6 +705,37 @@ async def ai_suggest(
         raise HTTPException(status_code=503, detail=f"IA indisponível: {exc}")
 
 
+@app.post("/identify/expiry-ai")
+async def expiry_ai(
+    frame: UploadFile = File(...),
+    _: models.User = Depends(get_current_user),
+):
+    """Leitura de validade por IA multimodal — fallback quando o OCR local falha
+    (sob demanda, respeita o mesmo teto diário da identificação)."""
+    from backend.ai_identify import AILimitReached, read_expiry, usage_stats
+
+    data = await frame.read()
+    try:
+        result = read_expiry(data)
+    except AILimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except Exception as exc:
+        logger.warning("IA indisponível: %s", exc)
+        raise HTTPException(status_code=503, detail=f"IA indisponível: {exc}")
+
+    expiry = None
+    if result.get("expiry_date"):
+        try:
+            parsed = datetime.fromisoformat(result["expiry_date"])
+            expiry = {"date": parsed.date().isoformat(),
+                      "expired": parsed.date() < datetime.utcnow().date(),
+                      "source_text": result.get("raw_text") or "IA"}
+        except ValueError:
+            logger.warning("IA devolveu data não-ISO: %r", result["expiry_date"])
+    return {"expiry": expiry, "confidence": result.get("confidence"),
+            "usage": usage_stats()}
+
+
 @app.get("/ai/usage")
 def ai_usage(_: models.User = Depends(get_current_user)):
     """Contador de uso e custo estimado da identificação por IA."""
@@ -707,6 +772,401 @@ def stock_in_by_ean(
     inv.quantity += body.quantity
     db.commit()
     return {"ean": ean, "product_name": product.name, "quantity": inv.quantity}
+
+
+# ---------- Conferência de Recebimento — NF-e vs câmera (P10) ----------
+def _receiving_detail(db: Session, sess: models.ReceivingSession) -> dict:
+    items = []
+    for it in sess.items:
+        registered = (
+            db.query(models.Product).filter(models.Product.sku == it.ean).first()
+            is not None if it.ean else False
+        )
+        items.append({
+            "id": it.id, "ean": it.ean, "description": it.description,
+            "expected_qty": it.expected_qty, "checked_qty": it.checked_qty,
+            "unit_cost": it.unit_cost, "status": it.item_status,
+            "registered": registered,
+        })
+    order = {"pendente": 0, "divergente": 1, "excedente": 2, "conferido": 3}
+    items.sort(key=lambda i: (order.get(i["status"], 9), i["description"]))
+    done = sum(i["status"] != "pendente" for i in items)
+    return {
+        "id": sess.id, "store_id": sess.store_id, "status": sess.status,
+        "nfe_key": sess.nfe_key, "supplier": sess.supplier,
+        "issued_at": sess.issued_at.isoformat() if sess.issued_at else None,
+        "created_at": sess.created_at.isoformat(),
+        "closed_at": sess.closed_at.isoformat() if sess.closed_at else None,
+        "items": items, "total_items": len(items), "checked_items": done,
+        "total_value": round(sum(i["expected_qty"] * i["unit_cost"] for i in items), 2),
+    }
+
+
+@app.post("/receiving/upload-xml", status_code=201)
+async def receiving_upload_xml(
+    xml: UploadFile = File(...),
+    store_id: int | None = None,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Importa o XML da NF-e de entrada e abre a conferência de recebimento."""
+    from backend.nfe_parser import NFEParseError, parse_nfe
+
+    data = await xml.read()
+    try:
+        nfe = parse_nfe(data)
+    except NFEParseError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if store_id is not None:
+        store = _get_or_404(db, models.Store, store_id)
+    else:
+        store = _demo_store(db, user)
+
+    if nfe["key"]:
+        duplicate = (
+            db.query(models.ReceivingSession)
+            .filter(models.ReceivingSession.nfe_key == nfe["key"],
+                    models.ReceivingSession.status != "discarded")
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=f"NF-e já importada na conferência {duplicate.id}")
+
+    sess = models.ReceivingSession(
+        store_id=store.id, user_id=user.id, nfe_key=nfe["key"],
+        supplier=nfe["supplier"], issued_at=nfe["issued_at"],
+    )
+    db.add(sess)
+    db.flush()
+    for item in nfe["items"]:
+        db.add(models.ReceivingItem(
+            session_id=sess.id, ean=item["ean"], description=item["description"],
+            expected_qty=item["qty"], unit_cost=item["unit_cost"],
+        ))
+    db.commit()
+    db.refresh(sess)
+    return _receiving_detail(db, sess)
+
+
+@app.get("/receiving")
+def list_receiving(
+    store_id: int | None = None,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    q = db.query(models.ReceivingSession).order_by(models.ReceivingSession.id.desc())
+    if store_id is not None:
+        q = q.filter(models.ReceivingSession.store_id == store_id)
+    return [
+        {"id": s.id, "supplier": s.supplier, "status": s.status,
+         "created_at": s.created_at.isoformat(), "items": len(s.items),
+         "checked": sum(i.item_status != "pendente" for i in s.items)}
+        for s in q.limit(50).all()
+    ]
+
+
+@app.get("/receiving/{session_id}")
+def get_receiving(
+    session_id: int,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _receiving_detail(db, _get_or_404(db, models.ReceivingSession, session_id))
+
+
+class ReceivingCheck(schemas.BaseModel):
+    ean: str
+    qty: float = 1
+
+
+@app.post("/receiving/{session_id}/check")
+def receiving_check(
+    session_id: int,
+    body: ReceivingCheck,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Dá baixa no checklist pelo EAN escaneado (soma qty ao conferido)."""
+    sess = _get_or_404(db, models.ReceivingSession, session_id)
+    if sess.status != "open":
+        raise HTTPException(status_code=409, detail="Conferência não está aberta")
+    item = (
+        db.query(models.ReceivingItem)
+        .filter(models.ReceivingItem.session_id == sess.id,
+                models.ReceivingItem.ean == body.ean)
+        .first()
+    )
+    if item is None:  # veio na entrega mas não está na nota
+        item = models.ReceivingItem(
+            session_id=sess.id, ean=body.ean, description=f"Excedente {body.ean}",
+            expected_qty=0, checked_qty=0, item_status="excedente",
+        )
+        db.add(item)
+    item.checked_qty += body.qty
+    if item.expected_qty > 0:
+        item.item_status = ("conferido" if item.checked_qty == item.expected_qty
+                            else "divergente")
+    db.commit()
+    return {"ean": item.ean, "description": item.description,
+            "expected_qty": item.expected_qty, "checked_qty": item.checked_qty,
+            "status": item.item_status}
+
+
+@app.post("/receiving/{session_id}/close")
+def receiving_close(
+    session_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Fecha a conferência: o que foi CONFERIDO entra no estoque (movimento in),
+    o custo da nota atualiza o cost_price (alimenta o Smart Pricing) e produtos
+    desconhecidos são cadastrados automaticamente a partir da descrição da nota.
+    """
+    from backend.normalizer import normalize_product
+
+    sess = _get_or_404(db, models.ReceivingSession, session_id)
+    if sess.status != "open":
+        raise HTTPException(status_code=409, detail="Conferência não está aberta")
+
+    entered = 0
+    registered = []
+    divergences = []
+    for it in sess.items:
+        if it.expected_qty > 0 and it.checked_qty != it.expected_qty:
+            divergences.append({
+                "ean": it.ean, "description": it.description,
+                "expected_qty": it.expected_qty, "checked_qty": it.checked_qty,
+                "status": "faltou" if it.checked_qty < it.expected_qty else "sobrou",
+            })
+        if it.expected_qty > 0 and it.checked_qty == 0:
+            it.item_status = "divergente"
+        qty = int(it.checked_qty)
+        if qty <= 0:
+            continue
+        product = None
+        inv = None
+        if it.ean:
+            product = (
+                db.query(models.Product).filter(models.Product.sku == it.ean).first()
+            )
+        if product is None and it.ean:
+            norm = normalize_product(it.description)
+            product = models.Product(
+                store_id=sess.store_id, sku=it.ean, name=norm["display_name"],
+                brand=norm["brand"] or "", category=norm["category"] or "",
+                size_value=norm["size_value"], size_unit=norm["size_unit"] or "",
+                name_raw=norm["name_raw"], source="nfe",
+            )
+            db.add(product)
+            db.flush()
+            min_stock = MIN_STOCK_BY_CATEGORY.get(norm["category"] or "",
+                                                  DEFAULT_MIN_STOCK)
+            inv = models.Inventory(product_id=product.id, quantity=0,
+                                   min_stock=min_stock)
+            db.add(inv)
+            registered.append({"ean": it.ean, "name": product.name})
+        if product is None:
+            continue  # item sem EAN: não movimenta estoque automaticamente
+        if it.unit_cost > 0:
+            product.cost_price = it.unit_cost
+        db.add(models.Movement(product_id=product.id, quantity=qty, type="in",
+                               unit_value=it.unit_cost, user_id=user.id,
+                               note=f"NF-e {sess.nfe_key[-8:] if sess.nfe_key else sess.id}"))
+        if inv is None:
+            inv = (
+                db.query(models.Inventory)
+                .filter(models.Inventory.product_id == product.id)
+                .first()
+            )
+        if inv is None:
+            inv = models.Inventory(product_id=product.id, quantity=0)
+            db.add(inv)
+        inv.quantity += qty
+        entered += qty
+
+    sess.status = "closed"
+    sess.closed_at = datetime.utcnow()
+    db.commit()
+    return {"session_id": sess.id, "entered_units": entered,
+            "auto_registered": registered, "divergences": divergences}
+
+
+@app.post("/receiving/{session_id}/discard")
+def receiving_discard(
+    session_id: int,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sess = _get_or_404(db, models.ReceivingSession, session_id)
+    if sess.status != "open":
+        raise HTTPException(status_code=409, detail="Conferência não está aberta")
+    sess.status = "discarded"
+    sess.closed_at = datetime.utcnow()
+    db.commit()
+    return {"session_id": sess.id, "status": sess.status}
+
+
+# ---------- Perdas e Quebras (P11) ----------
+LOSS_REASONS = ("vencimento", "avaria", "furto", "erro_cadastro", "consumo_interno")
+
+
+class LossIn(schemas.BaseModel):
+    ean: str
+    quantity: int = 1
+    reason: str
+    note: str = ""
+
+
+@app.post("/losses", status_code=201)
+def register_loss(
+    body: LossIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Registra perda: baixa o estoque e valoriza pelo preço de venda atual."""
+    if body.reason not in LOSS_REASONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Motivo inválido. Use um de: {', '.join(LOSS_REASONS)}")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=422, detail="Quantidade deve ser positiva")
+    product = db.query(models.Product).filter(models.Product.sku == body.ean).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    db.add(models.Movement(product_id=product.id, quantity=body.quantity,
+                           type="loss", reason=body.reason, note=body.note,
+                           unit_value=product.price or 0, user_id=user.id))
+    inv = (
+        db.query(models.Inventory)
+        .filter(models.Inventory.product_id == product.id)
+        .first()
+    )
+    if inv is not None:
+        inv.quantity = max(0, inv.quantity - body.quantity)
+        if body.reason == "vencimento" and inv.quantity == 0:
+            inv.expiry_date = None  # lote vencido saiu inteiro: limpa o alerta
+    db.commit()
+    value = round(body.quantity * (product.price or 0), 2)
+    return {"ean": body.ean, "product_name": product.name,
+            "quantity": body.quantity, "reason": body.reason,
+            "value": value, "stock_after": inv.quantity if inv else 0}
+
+
+@app.get("/losses/report")
+def losses_report(
+    days: int = 30,
+    store_id: int | None = None,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Perdas do período: total em R$, por motivo e por produto + índice de perdas."""
+    from datetime import timedelta
+
+    since = datetime.utcnow() - timedelta(days=days)
+    q = (
+        db.query(models.Movement, models.Product)
+        .join(models.Product, models.Product.id == models.Movement.product_id)
+        .filter(models.Movement.type == "loss", models.Movement.timestamp >= since)
+    )
+    if store_id is not None:
+        q = q.filter(models.Product.store_id == store_id)
+
+    total_value = 0.0
+    total_units = 0
+    by_reason: dict[str, dict] = {}
+    by_product: dict[str, dict] = {}
+    for mv, product in q.all():
+        value = round(mv.quantity * (mv.unit_value or product.price or 0), 2)
+        total_value += value
+        total_units += mv.quantity
+        r = by_reason.setdefault(mv.reason or "sem_motivo",
+                                 {"reason": mv.reason or "sem_motivo",
+                                  "units": 0, "value": 0.0})
+        r["units"] += mv.quantity
+        r["value"] = round(r["value"] + value, 2)
+        p = by_product.setdefault(product.sku, {
+            "sku": product.sku, "name": product.name, "units": 0, "value": 0.0})
+        p["units"] += mv.quantity
+        p["value"] = round(p["value"] + value, 2)
+
+    # índice de perdas: % sobre o valor do estoque atual (meta varejo: < 2%)
+    inv_q = (
+        db.query(models.Product, models.Inventory)
+        .outerjoin(models.Inventory, models.Inventory.product_id == models.Product.id)
+    )
+    if store_id is not None:
+        inv_q = inv_q.filter(models.Product.store_id == store_id)
+    stock_value = sum((inv.quantity if inv else 0) * (prod.price or 0)
+                      for prod, inv in inv_q.all())
+    loss_pct = round(100 * total_value / stock_value, 2) if stock_value else None
+
+    return {
+        "days": days, "total_value": round(total_value, 2),
+        "total_units": total_units, "loss_pct_of_stock": loss_pct,
+        "target_pct": 2.0,
+        "by_reason": sorted(by_reason.values(), key=lambda r: -r["value"]),
+        "by_product": sorted(by_product.values(), key=lambda p: -p["value"])[:20],
+    }
+
+
+# ---------- Precificação Inteligente (P5) ----------
+@app.get("/pricing/suggestions")
+def pricing_suggestions(
+    store_id: int | None = None,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sugestões de preço: desconto por validade próxima e recomposição de margem."""
+    from backend.pricing import expiry_suggestion, margin_suggestion
+
+    q = (
+        db.query(models.Product, models.Inventory)
+        .outerjoin(models.Inventory, models.Inventory.product_id == models.Product.id)
+    )
+    if store_id is not None:
+        q = q.filter(models.Product.store_id == store_id)
+
+    suggestions = []
+    for product, inv in q.all():
+        base = {"sku": product.sku, "name": product.name}
+        s = expiry_suggestion(product, inv)
+        if s:  # validade tem prioridade: dinheiro parado prestes a virar perda
+            suggestions.append({**base, **s})
+            continue
+        s = margin_suggestion(product)
+        if s:
+            suggestions.append({**base, **s})
+
+    order = {"validade": 0, "margem": 1}
+    suggestions.sort(key=lambda s: (order[s["type"]], s.get("days_left", 999)))
+    return {"suggestions": suggestions, "count": len(suggestions)}
+
+
+class ApplyPrice(schemas.BaseModel):
+    price: float
+
+
+@app.post("/pricing/{ean}/apply")
+def apply_price(
+    ean: str,
+    body: ApplyPrice,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aplica o preço sugerido (ou digitado) — decisão sempre do lojista."""
+    if body.price < 0:
+        raise HTTPException(status_code=422, detail="Preço inválido")
+    product = db.query(models.Product).filter(models.Product.sku == ean).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    product.price = round(body.price, 2)
+    db.commit()
+    return {"ean": ean, "name": product.name, "price": product.price}
 
 
 # ---------- Curadoria do dataset (double-check humano) ----------
@@ -1110,7 +1570,23 @@ def dashboard_summary(
             })
     expiring.sort(key=lambda i: i["days_left"])
 
+    # perdas dos últimos 30 dias (P11) — o número que o dono sente no bolso
+    from datetime import timedelta
+
+    loss_q = (
+        db.query(models.Movement, models.Product)
+        .join(models.Product, models.Product.id == models.Movement.product_id)
+        .filter(models.Movement.type == "loss",
+                models.Movement.timestamp >= datetime.utcnow() - timedelta(days=30))
+    )
+    if store_id is not None:
+        loss_q = loss_q.filter(models.Product.store_id == store_id)
+    losses_30d = round(sum(
+        mv.quantity * (mv.unit_value or product.price or 0)
+        for mv, product in loss_q.all()), 2)
+
     return {
+        "losses_30d": losses_30d,
         "total_products": len(rows),
         "total_units": total_units,
         "stock_value": round(stock_value, 2),
