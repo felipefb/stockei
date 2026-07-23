@@ -43,6 +43,7 @@
       <div class="kpi"><div class="label">Produtos no catálogo</div><div class="value" id="k-products">—</div></div>
       <div class="kpi"><div class="label">Itens em alerta (&lt; 5 un)</div><div class="value amber" id="k-low">—</div></div>
       <div class="kpi"><div class="label">R$ em risco (validade ≤ 30d)</div><div class="value" id="k-exp" style="color:var(--danger)">—</div></div>
+      <div class="kpi"><div class="label">Perdas (30 dias)</div><div class="value" id="k-loss" style="color:var(--danger)">—</div></div>
     </div>
 
     <div class="grid">
@@ -62,6 +63,17 @@
         <table><thead><tr><th>Categoria</th><th style="text-align:right">Unid.</th><th style="text-align:right">Valor (R$)</th></tr></thead>
           <tbody id="t-cat"><tr><td class="muted" colspan="3">—</td></tr></tbody></table>
       </div>
+      <div class="panel">
+        <h2>💸 Perdas do período (30 dias)</h2>
+        <table><thead><tr><th>Motivo</th><th style="text-align:right">Unid.</th><th style="text-align:right">Valor (R$)</th></tr></thead>
+          <tbody id="t-loss"><tr><td class="muted" colspan="3">—</td></tr></tbody></table>
+        <p class="muted" id="loss-pct" style="font-size:0.8rem;margin-top:0.5rem"></p>
+      </div>
+      <div class="panel">
+        <h2>💡 Sugestões de preço</h2>
+        <table><thead><tr><th>Produto</th><th style="text-align:right">Atual</th><th style="text-align:right">Sugerido</th><th>Por quê</th><th></th></tr></thead>
+          <tbody id="t-price"><tr><td class="muted" colspan="5">—</td></tr></tbody></table>
+      </div>
       <div class="panel" style="grid-column:1/-1">
         <h2>🕒 Últimas movimentações</h2>
         <table><thead><tr><th>Produto</th><th>Tipo</th><th style="text-align:right">Qtd</th><th>Quando</th></tr></thead>
@@ -72,7 +84,37 @@
 
   <script>
     const brl = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
-    const TYPES = { in:"Entrada", out:"Saída", adjustment:"Ajuste" };
+    const TYPES = { in:"Entrada", out:"Saída", adjustment:"Ajuste", loss:"Perda" };
+    const REASONS = { vencimento:"Vencimento", avaria:"Avaria", furto:"Furto",
+                      erro_cadastro:"Erro de cadastro", consumo_interno:"Consumo interno",
+                      sem_motivo:"Sem motivo" };
+    const auth = () => ({ Authorization: `Bearer ${sessionStorage.getItem("token")}` });
+
+    async function registerLoss(ean, name, qty) {
+      const q = prompt(`Registrar perda de "${name}" — quantas unidades?`, qty);
+      if (!q) return;
+      const r = await fetch("/losses", {
+        method: "POST",
+        headers: { ...auth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ean, quantity: parseInt(q, 10), reason: "vencimento",
+                               note: "baixa pelo dashboard" }),
+      });
+      const d = await r.json();
+      alert(r.ok ? `Perda registrada: ${d.quantity} un · ${brl(d.value)}`
+                 : `Erro: ${d.detail}`);
+      load();
+    }
+
+    async function applyPrice(ean, price, name) {
+      if (!confirm(`Aplicar ${brl(price)} em "${name}"?`)) return;
+      const r = await fetch(`/pricing/${ean}/apply`, {
+        method: "POST",
+        headers: { ...auth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ price }),
+      });
+      if (!r.ok) alert(`Erro: ${(await r.json()).detail}`);
+      load();
+    }
 
     function activeStore() {
       const v = sessionStorage.getItem("store_id");
@@ -117,6 +159,7 @@
       document.getElementById("k-products").textContent = d.total_products;
       document.getElementById("k-low").textContent = d.low_stock.length;
       document.getElementById("k-exp").textContent = brl(d.expiring_value || 0);
+      document.getElementById("k-loss").textContent = brl(d.losses_30d || 0);
 
       document.getElementById("t-exp").innerHTML = (d.expiring || []).length
         ? d.expiring.map(i => {
@@ -125,9 +168,13 @@
               : i.days_left <= 7
                 ? `<span class='tag out'>${i.days_left}d</span>`
                 : `<span class='tag adjustment'>${i.days_left}d</span>`;
+            const lossBtn = i.days_left < 0
+              ? `<button class="btn" style="padding:0.2rem 0.5rem;font-size:0.75rem"
+                   onclick="registerLoss('${i.sku}', '${i.name.replace(/'/g, "\\'")}', ${i.quantity})">Registrar perda</button>`
+              : "";
             return `<tr><td>${i.name}</td><td class="num">${i.quantity}</td>
                     <td class="num">${i.value.toFixed(2)}</td>
-                    <td class="muted mono">${i.expiry_date}</td><td>${tag}</td></tr>`;
+                    <td class="muted mono">${i.expiry_date}</td><td>${tag} ${lossBtn}</td></tr>`;
           }).join("")
         : "<tr><td class='muted' colspan='5'>Nenhum item com validade próxima 🎉</td></tr>";
 
@@ -145,7 +192,36 @@
             `<tr><td>${m.product}</td><td><span class="tag ${m.type}">${TYPES[m.type]||m.type}</span></td>
              <td class="num">${m.quantity}</td><td class="muted">${new Date(m.timestamp+"Z").toLocaleString("pt-BR")}</td></tr>`).join("")
         : "<tr><td class='muted' colspan='4'>Sem movimentações ainda</td></tr>";
+
+      loadLossesAndPricing();
     }
+    async function loadLossesAndPricing() {
+      const store = activeStore();
+      const qs = store ? `?store_id=${store}` : "";
+
+      const loss = await (await fetch(`/losses/report${qs ? qs + "&" : "?"}days=30`,
+                                      { headers: auth() })).json();
+      document.getElementById("t-loss").innerHTML = loss.by_reason.length
+        ? loss.by_reason.map(r => `<tr><td>${REASONS[r.reason] || r.reason}</td>
+            <td class="num">${r.units}</td><td class="num">${r.value.toFixed(2)}</td></tr>`).join("")
+        : "<tr><td class='muted' colspan='3'>Nenhuma perda no período 🎉</td></tr>";
+      document.getElementById("loss-pct").textContent =
+        loss.loss_pct_of_stock !== null
+          ? `Índice de perdas: ${loss.loss_pct_of_stock}% do estoque (meta < ${loss.target_pct}%)`
+          : "";
+
+      const pricing = await (await fetch(`/pricing/suggestions${qs}`,
+                                         { headers: auth() })).json();
+      document.getElementById("t-price").innerHTML = pricing.suggestions.length
+        ? pricing.suggestions.slice(0, 10).map(s =>
+            `<tr><td>${s.name}</td><td class="num">${s.current_price.toFixed(2)}</td>
+             <td class="num" style="color:var(--lime)">${s.suggested_price.toFixed(2)}</td>
+             <td class="muted" style="font-size:0.78rem">${s.reason}</td>
+             <td><button class="btn" style="padding:0.2rem 0.5rem;font-size:0.75rem"
+               onclick="applyPrice('${s.sku}', ${s.suggested_price}, '${s.name.replace(/'/g, "\\'")}')">Aplicar</button></td></tr>`).join("")
+        : "<tr><td class='muted' colspan='5'>Nenhuma sugestão — preços saudáveis 🎉</td></tr>";
+    }
+
     loadStores().then(load);
     setInterval(load, 10000);
   </script>

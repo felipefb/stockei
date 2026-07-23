@@ -91,6 +91,8 @@
                        inputmode="numeric" maxlength="10"
                        oninput="formatExpiryInput(this)" style="flex:1">
                 <button class="btn" onclick="manualExpiry()">OK</button>
+                <button class="btn" id="btn-expiry-ai" onclick="aiExpiry()"
+                        title="Ler a data com IA (custa centavos)">🤖</button>
               </div>
             </div>
             <div id="scan-idle" class="loading" hidden></div>
@@ -208,19 +210,27 @@
         // captura, ou cadastro novo precisando de nome
         const expiryPending = capture.ean && !capture.expirySaved;
         const namePending = !document.getElementById("scan-new").hidden;
-        if (!expiryPending && !namePending) return;
+        // sem captura em andamento: o zxing do servidor cobre os códigos que
+        // o navegador não decodifica (modo leve, sem OCR)
+        const eanPending = !capture.ean;
+        if (!expiryPending && !namePending && !eanPending) return;
         // alta resolução com proporção preservada — essencial para ler datas pequenas
         const blob = await captureFrameHiRes();
         if (!blob) return;
         const form = new FormData();
         form.append("frame", blob, "frame.jpg");
+        const url = (!expiryPending && !namePending)
+          ? "/identify/scan-frame?mode=barcode" : "/identify/scan-frame";
         try {
-          const r = await fetch("/identify/scan-frame", {
+          const r = await fetch(url, {
             method: "POST",
             headers: { "Authorization": `Bearer ${sessionStorage.getItem("token")}` },
             body: form,
           });
           const body = await r.json();
+
+          // código decodificado no servidor (zxing) → mesmo fluxo do leitor local
+          if (body.ean && !capture.ean) handleBarcode(body.ean);
 
           // nome lido da embalagem → preenche o cadastro de produto novo
           const input = document.getElementById("n-name");
@@ -298,6 +308,41 @@
       document.getElementById("m-expiry").value = "";
       if (capture.known) saveExpiry();
       else setCheck("ck-expiry", true, iso + " (grava no cadastro)");
+    }
+
+    // Validade por IA: para datas que o OCR local não vence (relevo em metal,
+    // jato de tinta apagado). 1 clique = 1 chamada — mesmo teto diário da IA.
+    async function aiExpiry() {
+      const btn = document.getElementById("btn-expiry-ai");
+      const blob = await captureFrameHiRes();
+      if (!blob) return;
+      btn.disabled = true;
+      setCheck("ck-expiry", false, "🤖 lendo a data…");
+      try {
+        const form = new FormData();
+        form.append("frame", blob, "frame.jpg");
+        const r = await fetch("/identify/expiry-ai", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${sessionStorage.getItem("token")}` },
+          body: form,
+        });
+        const body = await r.json();
+        if (!r.ok) { setCheck("ck-expiry", false, body.detail || "IA falhou"); return; }
+        if (!body.expiry) {
+          setCheck("ck-expiry", false, "IA não achou a data — aproxime e tente de novo");
+          return;
+        }
+        capture.expiry = body.expiry;
+        capture.expirySaved = false;
+        const label = body.expiry.date + (body.expiry.expired ? " ⚠ VENCIDO" : "") +
+          ` (IA, ${body.confidence})`;
+        if (capture.known) await saveExpiry();
+        else setCheck("ck-expiry", true, label + " — grava no cadastro");
+      } catch (e) {
+        setCheck("ck-expiry", false, "IA indisponível agora");
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // ---------- Scanner de código de barras (BarcodeDetector nativo do Chrome) ----------

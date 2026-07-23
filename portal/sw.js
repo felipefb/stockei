@@ -1,9 +1,10 @@
 /* Stockei — service worker: cache do shell estático; dados sempre online. */
-const CACHE = "stockei-shell-v4";
+const CACHE = "stockei-shell-v5";
 const SHELL = [
   "/portal/index.html",
   "/portal/demo_portal.html",
   "/portal/dashboard.html",
+  "/portal/receiving.html",
   "/frontend/camera_styles.css",
   "/frontend/camera_streaming.js?v=6",
   "/portal/manifest.json",

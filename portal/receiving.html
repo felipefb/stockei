@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Stockei — Recebimento</title>
+  <link rel="stylesheet" href="../frontend/camera_styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0a0b10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+  <style>
+    /* Recebimento: NF-e vira checklist vivo — escaneou, riscou. */
+    .layout { max-width: 640px; margin: 0 auto; padding: 1.25rem 1.1rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center;
+              margin-bottom: 1.2rem; }
+    .upload-zone {
+      border: 1.5px dashed var(--border-hi); border-radius: var(--radius-sm);
+      padding: 1.6rem 1.2rem; text-align: center; color: var(--muted);
+      cursor: pointer; transition: border-color 0.12s ease;
+    }
+    .upload-zone:active { border-color: var(--lime); }
+    .progress-bar { height: 6px; background: var(--surface); border-radius: 3px;
+                    overflow: hidden; margin: 0.8rem 0 1rem; }
+    .progress-bar div { height: 100%; background: var(--lime); width: 0;
+                        transition: width 0.25s ease; }
+    .recv-item {
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.75rem 0.9rem; margin-bottom: 0.5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .recv-item.conferido { opacity: 0.55; }
+    .recv-item.conferido .desc { text-decoration: line-through; }
+    .recv-item.divergente { border-left: 3px solid var(--amber); }
+    .recv-item.excedente  { border-left: 3px solid var(--violet, #8b5cf6); }
+    .recv-item .desc { flex: 1; font-size: 0.88rem; }
+    .recv-item .qty { font-family: var(--font-mono); font-size: 0.82rem;
+                      color: var(--muted); white-space: nowrap; }
+    .recv-item .qty b { color: var(--text); }
+    .scanline { display: flex; gap: 0.5rem; margin: 0.9rem 0; }
+    .scanline input { flex: 1; }
+    .sess-row { display: flex; justify-content: space-between; padding: 0.7rem 0.9rem;
+                margin-bottom: 0.5rem; background: var(--surface);
+                border: 1px solid var(--border); border-radius: var(--radius-sm);
+                cursor: pointer; font-size: 0.88rem; }
+    .actions-row { display: flex; gap: 0.6rem; margin-top: 1rem; }
+    .actions-row .btn { flex: 1; }
+    #result { white-space: pre-wrap; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="topbar">
+      <div>
+        <span class="klabel">Recebimento</span><br>
+        <span class="brand">STOCKEI</span>
+      </div>
+      <a class="btn" href="index.html" style="text-decoration:none">☰ Menu</a>
+    </div>
+
+    <!-- passo 1: importar a nota -->
+    <div id="step-upload">
+      <div class="upload-zone" onclick="document.getElementById('xml-file').click()">
+        <div style="font-size:1.6rem">📄</div>
+        <b>Importar XML da NF-e</b><br>
+        <span style="font-size:0.82rem">A nota vira um checklist: escaneie os produtos
+        chegando e o Stockei confere sozinho.</span>
+      </div>
+      <input id="xml-file" type="file" accept=".xml,text/xml" hidden
+             onchange="uploadXml(this.files[0])">
+      <h2 style="margin-top:1.4rem">Conferências</h2>
+      <div id="sessions"><p class="muted">carregando…</p></div>
+    </div>
+
+    <!-- passo 2: conferir -->
+    <div id="step-check" hidden>
+      <p style="margin:0"><b id="c-supplier">—</b><br>
+        <span class="muted" id="c-meta" style="font-size:0.8rem"></span></p>
+      <div class="progress-bar"><div id="c-progress"></div></div>
+      <div class="scanline">
+        <input id="scan-ean" class="input" inputmode="numeric" autocomplete="off"
+               placeholder="Escaneie ou digite o EAN" onkeydown="if(event.key==='Enter')checkEan()">
+        <button class="btn primary" onclick="checkEan()">Conferir</button>
+      </div>
+      <div id="c-items"></div>
+      <div class="actions-row" id="c-actions">
+        <button class="btn" onclick="discardSession()">Descartar</button>
+        <button class="btn primary" onclick="closeSession()">Fechar e dar entrada</button>
+      </div>
+      <div class="panel" id="c-result" hidden style="margin-top:1rem">
+        <h2>Resultado</h2><div id="result"></div>
+        <button class="btn" style="margin-top:0.8rem" onclick="backToList()">← Voltar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const auth = () => ({ Authorization: `Bearer ${sessionStorage.getItem("token")}` });
+    const brl = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
+    let current = null;
+
+    function guard(r) {
+      if (r.status === 401) { location.href = "demo_portal.html"; throw new Error("401"); }
+      return r;
+    }
+
+    async function loadSessions() {
+      const r = guard(await fetch("/receiving", { headers: auth() }));
+      const list = await r.json();
+      document.getElementById("sessions").innerHTML = list.length
+        ? list.map(s => `<div class="sess-row" onclick="openSession(${s.id})">
+            <span>${s.supplier || "NF-e " + s.id}</span>
+            <span class="muted">${s.checked}/${s.items} ·
+              ${{open:"aberta",closed:"fechada",discarded:"descartada"}[s.status]}</span>
+          </div>`).join("")
+        : "<p class='muted'>Nenhuma conferência ainda — importe a primeira nota.</p>";
+    }
+
+    async function uploadXml(file) {
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("xml", file);
+      const r = guard(await fetch("/receiving/upload-xml", {
+        method: "POST", headers: auth(), body: fd }));
+      const d = await r.json();
+      if (!r.ok) { alert(`Erro: ${d.detail}`); return; }
+      render(d);
+    }
+
+    async function openSession(id) {
+      const r = guard(await fetch(`/receiving/${id}`, { headers: auth() }));
+      render(await r.json());
+    }
+
+    function render(d) {
+      current = d;
+      document.getElementById("step-upload").hidden = true;
+      document.getElementById("step-check").hidden = false;
+      document.getElementById("c-result").hidden = true;
+      document.getElementById("c-actions").hidden = d.status !== "open";
+      document.getElementById("scan-ean").disabled = d.status !== "open";
+      document.getElementById("c-supplier").textContent = d.supplier || `NF-e ${d.id}`;
+      document.getElementById("c-meta").textContent =
+        `${d.total_items} itens · ${brl(d.total_value)}` +
+        (d.issued_at ? ` · emitida ${d.issued_at.slice(0,10)}` : "");
+      document.getElementById("c-progress").style.width =
+        d.total_items ? `${100 * d.checked_items / d.total_items}%` : "0";
+      document.getElementById("c-items").innerHTML = d.items.map(i => {
+        const icon = { pendente:"◻", conferido:"✓", divergente:"⚠", excedente:"＋" }[i.status];
+        return `<div class="recv-item ${i.status}">
+          <span>${icon}</span>
+          <span class="desc">${i.description}${i.registered ? "" :
+            " <span class='muted' style='font-size:0.72rem'>(novo)</span>"}</span>
+          <span class="qty"><b>${i.checked_qty}</b>/${i.expected_qty}</span>
+        </div>`;
+      }).join("");
+      if (d.status === "open") document.getElementById("scan-ean").focus();
+    }
+
+    async function checkEan() {
+      const input = document.getElementById("scan-ean");
+      const ean = input.value.trim();
+      if (!ean) return;
+      const r = guard(await fetch(`/receiving/${current.id}/check`, {
+        method: "POST", headers: { ...auth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ean }) }));
+      const d = await r.json();
+      if (!r.ok) { alert(`Erro: ${d.detail}`); return; }
+      input.value = "";
+      openSession(current.id);
+    }
+
+    async function closeSession() {
+      if (!confirm("Fechar a conferência? O que foi conferido entra no estoque.")) return;
+      const r = guard(await fetch(`/receiving/${current.id}/close`, {
+        method: "POST", headers: auth() }));
+      const d = await r.json();
+      if (!r.ok) { alert(`Erro: ${d.detail}`); return; }
+      const lines = [`✓ ${d.entered_units} unidades entraram no estoque.`];
+      if (d.auto_registered.length)
+        lines.push(`\nCadastrados automaticamente:\n` +
+          d.auto_registered.map(p => `  • ${p.name} (${p.ean})`).join("\n"));
+      if (d.divergences.length)
+        lines.push(`\nDivergências:\n` + d.divergences.map(v =>
+          `  • ${v.description}: esperado ${v.expected_qty}, conferido ${v.checked_qty} (${v.status})`).join("\n"));
+      document.getElementById("result").textContent = lines.join("\n");
+      document.getElementById("c-result").hidden = false;
+      document.getElementById("c-actions").hidden = true;
+      document.getElementById("scan-ean").disabled = true;
+    }
+
+    async function discardSession() {
+      if (!confirm("Descartar esta conferência? Nada entra no estoque.")) return;
+      guard(await fetch(`/receiving/${current.id}/discard`, {
+        method: "POST", headers: auth() }));
+      backToList();
+    }
+
+    function backToList() {
+      document.getElementById("step-check").hidden = true;
+      document.getElementById("step-upload").hidden = false;
+      loadSessions();
+    }
+
+    if (!sessionStorage.getItem("token")) location.href = "demo_portal.html";
+    else loadSessions();
+  </script>
+</body>
+</html>
